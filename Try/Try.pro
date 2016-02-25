@@ -1,5 +1,4 @@
-QT += core
-QT -= gui
+QT += core gui
 
 TARGET = Try
 CONFIG += console
@@ -10,9 +9,15 @@ TEMPLATE = app
 INCLUDEPATH += ../Raknet/Include ../Mdb
 DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
 win32:LIBS += -lWs2_32 -ladvapi32
+unix:LIBS += -lpthread
 SOURCES += \
     test_raknet.cpp \
     main.cpp \
-    test_lmdb.cpp
+    test_lmdb.cpp \
+    iclayer.cpp
 DESTDIR = $$_PRO_FILE_PWD_/../app
+
+HEADERS += \
+    iclayer.h \
+    iclayer_global.h
 

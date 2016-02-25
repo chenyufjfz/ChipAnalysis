@@ -1,6 +1,12 @@
 TEMPLATE = subdirs
 
 SUBDIRS += \
-    Raknet \
+    Raknet \    
+    Mdb \
     Try \
-    Mdb
+    DatServer \
+    ChipExtract
+
+Try.depends = Raknet Mdb
+DatServer.depends = Raknet Mdb
+ChipExtract.depends = Raknet Mdb
