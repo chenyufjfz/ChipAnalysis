@@ -1,5 +1,6 @@
 #include "clientthread.h"
 #include "communication.hpp"
+#include "RakSleep.h"
 
 RakNet::RakPeerInterface *rak_peer =NULL;
 RakNet::SystemAddress server_addr;
@@ -19,7 +20,7 @@ void ClientThread::run()
     RakNet::SocketDescriptor sd;
     sd.socketFamily = AF_INET;
     RakNet::Packet *packet;
-    qInfo("Client Start Raknet");
+    qInfo("Client Start net");
 
     rak_peer = RakNet::RakPeerInterface::GetInstance();
     rak_peer->Startup(1,&sd, 1);
@@ -29,6 +30,7 @@ void ClientThread::run()
     {
         for (packet=rak_peer->Receive(); packet; packet=rak_peer->Receive())
         {
+			bool need_delete = true;
             switch (packet->data[0])
             {
             case ID_CONNECTION_REQUEST_ACCEPTED:
@@ -50,7 +52,8 @@ void ClientThread::run()
                 emit server_disconnected();
                 break;
 
-            case ID_RESPONSE_BG_IMG:                
+            case ID_RESPONSE_BG_IMG:             
+				need_delete = false;
                 emit bkimg_packet_arrive((void*) packet);
                 break;
 
@@ -58,9 +61,10 @@ void ClientThread::run()
                 qCritical("Message identifier %i has arrived.\n", packet->data[0]);
                 break;
             }
-            if (packet->data[0]!=ID_RESPONSE_BG_IMG)
+			if (need_delete)
                 rak_peer->DeallocatePacket(packet);
         }
+        RakSleep(5);
     }
 
     RakNet::RakPeerInterface::DestroyInstance(rak_peer);

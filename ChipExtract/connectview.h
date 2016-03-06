@@ -19,12 +19,11 @@ public slots:
     void server_connected();
     void server_disconnected();
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
-                           QImage & image, bool finish, const QObject * view);
+                           QImage image, bool finish, const QObject * view);
 
 protected:
     void paintEvent(QPaintEvent *);
-    void keyPressEvent(QKeyEvent *e);
-    void adjust_viewrect();
+    void keyPressEvent(QKeyEvent *e);    
 
 protected:
     bool connect_to_server;

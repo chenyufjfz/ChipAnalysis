@@ -1,6 +1,8 @@
 #include "iclayer.h"
 #include <iostream>
 #include <QRect>
+#include <stdio.h>
+#include <QBuffer>
 
 using namespace std;
 int test_raknet();
@@ -18,26 +20,25 @@ void test_iclayer()
     {
         cout << "x:" << corners[i].x << "," << corners[i].y<<endl;
     }
+
     QImage qimage;
     layer.getImgByIdx(qimage, 0, 0);
-    qimage.save("../../a00.jpg");
+    qimage.save("a00.jpg", "JPG");
+    cout<<"bytes before scale:"<<qimage.byteCount();
+    qimage = qimage.scaled(qimage.width()/2, qimage.height()/2);
+    cout<<", bytes after scale:"<<qimage.byteCount()<<endl;
+    QByteArray ba;
+    QBuffer buffer(&ba);
+    buffer.open(QIODevice::WriteOnly);
+    qimage.save(&buffer, "JPG");
+    FILE * fp = fopen("a01.jpg", "wb");
+    fwrite(ba.data(), 1, ba.size(), fp);
+    fclose(fp);
 }
 
 int main()
 {
     //test_lmdb();
     //test_raknet();
-    QRect rect(1, 1, 10, 10);
-    rect.moveLeft(0);
-    printf("l=%d, r=%d, t=%d, b=%d\n", rect.left(), rect.right(), rect.top(), rect.bottom());
-    rect.moveTop(0);
-    printf("l=%d, r=%d, t=%d, b=%d\n", rect.left(), rect.right(), rect.top(), rect.bottom());
-    rect.moveRight(10);
-    printf("l=%d, r=%d, t=%d, b=%d\n", rect.left(), rect.right(), rect.top(), rect.bottom());
-    rect.moveBottom(10);
-    printf("l=%d, r=%d, t=%d, b=%d\n", rect.left(), rect.right(), rect.top(), rect.bottom());
-    rect.adjust(-1,-1,2,2);
-    printf("l=%d, r=%d, t=%d, b=%d\n", rect.left(), rect.right(), rect.top(), rect.bottom());
-    //test_iclayer();
-
+    test_iclayer();
 }

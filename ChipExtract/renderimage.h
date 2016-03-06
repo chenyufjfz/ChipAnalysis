@@ -64,7 +64,7 @@ public:
 
 signals:
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
-                           QImage & image, bool finish, const QObject * view);
+                           QImage image, bool finish, const QObject * view);
 
 public slots:
     void server_connected();
@@ -79,8 +79,8 @@ protected:
     void remove_cache_list(unsigned char scale);
 
 protected:
-    bool call_from_packet_arrivce;
-    bool connect_to_server;
+    bool call_from_packet_arrivce, connect_to_server;
+    int self_test, timer_id;
     map<MapID, RakNet::TimeMS> req_pkt_queue;
     int req_score, max_score;
     list <MapID> cache_list[MAX_SCALE];

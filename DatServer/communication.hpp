@@ -3,6 +3,8 @@
 #include "MessageIdentifiers.h"
 
 #define SERVER_PORT 13399
+#define ENABLE_CHECK_SUM 1
+typedef unsigned long long CHECKSUM_TYPE;
 enum GameMessages
 {
     ID_REQUIRE_BG_IMG = ID_USER_PACKET_ENUM,
@@ -25,6 +27,9 @@ typedef struct {
     unsigned short x, y;
     unsigned int len;
     unsigned char layer;
+#if ENABLE_CHECK_SUM & 1
+    CHECKSUM_TYPE check_sum;
+#endif
 } RspBkImgPkt;
 #pragma pack(pop)
 #endif // COMMUNICATION_H

@@ -1,13 +1,3 @@
-/*
- *  Copyright (c) 2014, Oculus VR, Inc.
- *  All rights reserved.
- *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant 
- *  of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
 #include "RakString.h"
 #include "RakAssert.h"
 #include "RakMemoryOverride.h"
@@ -458,7 +448,7 @@ WCHAR * RakString::ToWideChar(void)
 	if ( (sharedString->c_str == NULL) || (*sharedString->c_str == '\0') )
 	{
 		// Return empty string
-		return L"";
+        return (WCHAR*) L"";
 	}
 
 	//
@@ -652,22 +642,6 @@ void RakString::TerminateAtLastCharacter(char c)
 		}
 	}
 }
-void RakString::StartAfterLastCharacter(char c)
-{
-	int i, len=(int) GetLength();
-	for (i=len-1; i >= 0; i--)
-	{
-		if (sharedString->c_str[i]==c)
-		{
-			++i;
-			if (i < len)
-			{
-				*this = SubStr(i,GetLength()-i);
-			}
-			return;
-		}
-	}
-}
 void RakString::TerminateAtFirstCharacter(char c)
 {
 	unsigned int i, len=(unsigned int) GetLength();
@@ -675,26 +649,8 @@ void RakString::TerminateAtFirstCharacter(char c)
 	{
 		if (sharedString->c_str[i]==c)
 		{
-			if (i > 0)
-			{
-				Clone();
-				sharedString->c_str[i]=0;
-			}
-		}
-	}
-}
-void RakString::StartAfterFirstCharacter(char c)
-{
-	unsigned int i, len=(unsigned int) GetLength();
-	for (i=0; i < len; i++)
-	{
-		if (sharedString->c_str[i]==c)
-		{
-			++i;
-			if (i < len)
-			{
-				*this = SubStr(i,GetLength()-i);
-			}
+			Clone();
+			sharedString->c_str[i]=0;
 			return;
 		}
 	}

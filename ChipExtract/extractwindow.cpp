@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(&ct, SIGNAL(server_connected()), connect_view, SLOT(server_connected()));
     connect(&ct, SIGNAL(server_disconnected()), connect_view, SLOT(server_disconnected()));
     setCentralWidget(connect_view);
+    connect_view->setFocus();
     render_image->moveToThread(render_thread);
     render_thread->start();
 }

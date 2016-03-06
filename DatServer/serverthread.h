@@ -5,6 +5,8 @@
 
 class ServerThread : public QThread
 {
+    Q_OBJECT
+
 public:
     ServerThread();
     void end();

@@ -1,13 +1,3 @@
-/*
- *  Copyright (c) 2014, Oculus VR, Inc.
- *  All rights reserved.
- *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant 
- *  of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
 #include "NativeFeatureIncludes.h"
 #if _RAKNET_SUPPORT_NatPunchthroughClient==1
 
@@ -125,9 +115,9 @@ void NatPunchthroughClient::Update(void)
 		if (natPunchthroughDebugInterface)
 		{
 			natPunchthroughDebugInterface->OnClientMessage("CALCULATING_PORT_STRIDE timeout");
+			SendQueuedOpenNAT();
 		}
 
-		SendQueuedOpenNAT();
 		hasPortStride=UNKNOWN_PORT_STRIDE;
 	}
 
@@ -469,7 +459,7 @@ PluginReceiveResult NatPunchthroughClient::OnReceive(Packet *packet)
 				}
 			}
 		}
-		return RR_STOP_PROCESSING_AND_DEALLOCATE;	
+		break;		
 	case ID_OUT_OF_BAND_INTERNAL:
 		if (packet->length>=2 && packet->data[1]==ID_NAT_PONG)
 		{
@@ -797,34 +787,34 @@ char *TestModeToString(NatPunchthroughClient::SendPing::TestMode tm)
 	switch (tm)
 	{
 		case NatPunchthroughClient::SendPing::TESTING_INTERNAL_IPS:
-			return "TESTING_INTERNAL_IPS";
+            return (char*)"TESTING_INTERNAL_IPS";
 		break;
 		case NatPunchthroughClient::SendPing::WAITING_FOR_INTERNAL_IPS_RESPONSE:
-			return "WAITING_FOR_INTERNAL_IPS_RESPONSE";
+            return (char*)"WAITING_FOR_INTERNAL_IPS_RESPONSE";
 		break;
 // 		case NatPunchthroughClient::SendPing::SEND_WITH_TTL:
-// 			return "SEND_WITH_TTL";
+// 			return (char*)"SEND_WITH_TTL";
 // 		break;
 		case NatPunchthroughClient::SendPing::TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_FACILITATOR_PORT:
-			return "TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_FACILITATOR_PORT";
+            return (char*)"TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_FACILITATOR_PORT";
 		break;
 		case NatPunchthroughClient::SendPing::TESTING_EXTERNAL_IPS_1024_TO_FACILITATOR_PORT:
-			return "TESTING_EXTERNAL_IPS_1024_TO_FACILITATOR_PORT";
+            return (char*)"TESTING_EXTERNAL_IPS_1024_TO_FACILITATOR_PORT";
 		break;
 		case NatPunchthroughClient::SendPing::TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_1024:
-			return "TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_1024";
+            return (char*)"TESTING_EXTERNAL_IPS_FACILITATOR_PORT_TO_1024";
 		break;
 		case NatPunchthroughClient::SendPing::TESTING_EXTERNAL_IPS_1024_TO_1024:
-			return "TESTING_EXTERNAL_IPS_1024_TO_1024";
+            return (char*)"TESTING_EXTERNAL_IPS_1024_TO_1024";
 		break;
 		case NatPunchthroughClient::SendPing::WAITING_AFTER_ALL_ATTEMPTS:
-			return "WAITING_AFTER_ALL_ATTEMPTS";
+            return (char*)"WAITING_AFTER_ALL_ATTEMPTS";
 		break;
 		case NatPunchthroughClient::SendPing::PUNCHING_FIXED_PORT:
-			return "PUNCHING_FIXED_PORT";
+            return (char*)"PUNCHING_FIXED_PORT";
 		break;
 	}
-	return "";
+    return (char*)"";
 }
 void NatPunchthroughClient::SendOutOfBand(SystemAddress sa, MessageID oobId)
 {
