@@ -52,7 +52,7 @@ void ServerThread::run()
     rak_peer = RakNet::RakPeerInterface::GetInstance();
     rak_peer->Startup(max_user, &sd, 1);
     rak_peer->SetMaximumIncomingConnections(max_user);
-    rak_peer->SetPerConnectionOutgoingBandwidthLimit(5000000);
+    rak_peer->SetPerConnectionOutgoingBandwidthLimit(10000000);
     last_printtime = RakNet::GetTimeMS();
     while (!finish)
     {
@@ -107,7 +107,9 @@ void ServerThread::run()
             rak_peer->DeallocatePacket(packet);            
         }
         RakSleep(5);
-        {
+        RakNet::TimeMS current_time = RakNet::GetTimeMS();
+        if (current_time -last_printtime>=8000){
+            last_printtime = current_time;
             char text[2048];
             RakNet::RakNetStatistics rss;
             rak_peer->GetStatistics(RakNet::UNASSIGNED_SYSTEM_ADDRESS, &rss);

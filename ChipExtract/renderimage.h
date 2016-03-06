@@ -34,6 +34,9 @@ typedef struct {
     RakNet::TimeMS last_render_time;  //changed when render request
     list <MapID>::iterator rrp_load; //used by send packet
     bool update;  //indicate if load_queue filled by receive packet
+    map <MapID, unsigned int> preimg_map;
+    int prev_w, prev_h;
+    QImage pre_img;
 } RenderRequest;
 
 

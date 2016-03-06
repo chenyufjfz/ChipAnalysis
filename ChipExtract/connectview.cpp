@@ -55,7 +55,8 @@ void ConnectView::paintEvent(QPaintEvent *)
                  render_img.width() * view_rect.width() /render_rect.width(),
                  render_img.height()* view_rect.height() /render_rect.height());
     painter.drawImage(QRect(0,0, width(), height()), render_img, source);
-    emit render_bkimg(bk_layer, view_rect, size(), NO_NEED_RETURN, this, true);
+    qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
+           view_rect.right(), view_rect.bottom(), size().width(), size().height());
 }
 
 void ConnectView::keyPressEvent(QKeyEvent *e)

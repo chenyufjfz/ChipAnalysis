@@ -75,7 +75,7 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
         h = h>>1;
     }
     if (scale >=MAX_SCALE) {
-        qCritical("Repair me, still no");
+        qWarning("Repair me, still no");
         return;
     }
 
@@ -85,6 +85,7 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
                  QImage::Format_RGB32);
     image.fill(QColor(160, 160, 160));
     QPainter painter(&image);
+    map <MapID, unsigned int> curimg_map;
     for (int x=rpixel.left()/gcst.img_block_w(), x0=0; x<=rpixel.right()/gcst.img_block_w(); x++, x0+=w)
         for (int y=rpixel.top()/gcst.img_block_h(), y0=0; y<=rpixel.bottom()/gcst.img_block_h(); y++, y0+=h) {
             if (x<0 || x>=gcst.num_block_x() || y<0 || y>=gcst.num_block_y())
@@ -98,9 +99,29 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
                 if (pmap!=cache_map.end()) {
                     if (rt==RETURN_WHEN_PART_READY ||
                             rt==RETURN_UNTIL_ALL_READY && preq->second.load_queue.empty()) {
-                        QImage subimg;
-                        subimg.loadFromData(pmap->second.data, pmap->second.len);
-                        painter.drawImage(QRect(x0, y0, w, h), subimg);
+                        map<MapID, unsigned int>::iterator preimg_it = preq->second.preimg_map.find(id);
+                        if (preimg_it == preq->second.preimg_map.end() ||
+                                w > preq->second.prev_w || h>preq->second.prev_h) {
+                            QImage subimg;
+                            if (subimg.loadFromData(pmap->second.data, pmap->second.len))
+                                painter.drawImage(QRect(x0, y0, w, h), subimg);
+                            else {//Raknet have big packet bug, so drop invalid image.
+                                qDebug("corrupted image, delete l=%d, (%d,%d,%d)", layer, s, y, x);
+                                cache_list[s].erase(pmap->second.plist);
+                                cache_list[s].push_front(INVALID_MAP_ID);
+                                free(pmap->second.data);
+                                cache_map.erase(pmap);
+                                pmap =cache_map.end();
+                                continue;
+                            }
+                        } else {//Copy from previous image to save time
+                            unsigned x1 = preimg_it->second & 0xffff;
+                            unsigned y1 = preimg_it->second >> 16;
+                            painter.drawImage(QRect(x0, y0, w, h), preq->second.pre_img,
+                                              QRect(x1, y1, preq->second.prev_w, preq->second.prev_h));
+                            qDebug("draw from (%d,%d) to (%d,%d)", y1, x1, y0, x0);                            
+                        }
+                        curimg_map[id] = (y0<<16) | x0;
                     }
                     break;
                 }
@@ -114,14 +135,34 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
                         id = sxy2mapid(layer, s, x, y);
                         pmap =cache_map.find(id);
                         if (pmap!=cache_map.end()) {
-                            QImage subimg;
-                            subimg.loadFromData(pmap->second.data, pmap->second.len);
-                            painter.drawImage(QRect(x0, y0, w, h), subimg);
+                            map<MapID, unsigned int>::iterator preimg_it = preq->second.preimg_map.find(id);
+                            if (preimg_it == preq->second.preimg_map.end() ||
+                                     w > preq->second.prev_w || h > preq->second.prev_h) {
+                                QImage subimg;
+                                if (subimg.loadFromData(pmap->second.data, pmap->second.len))
+                                    painter.drawImage(QRect(x0, y0, w, h), subimg);
+                                else {//Raknet have big packet bug, so drop invalid image.
+                                    qDebug("image corrupted, delete l=%d, (%d,%d,%d)", layer, s, y, x);
+                                    cache_list[s].erase(pmap->second.plist);
+                                    cache_list[s].push_front(INVALID_MAP_ID);
+                                    free(pmap->second.data);
+                                    cache_map.erase(pmap);
+                                    pmap =cache_map.end();
+                                    continue;
+                                }
+                            } else { //Copy from previous image to save time
+                                unsigned x1 = preimg_it->second & 0xffff;
+                                unsigned y1 = preimg_it->second >> 16;
+                                painter.drawImage(QRect(x0, y0, w, h), preq->second.pre_img,
+                                                  QRect(x1, y1, preq->second.prev_w, preq->second.prev_h));
+                                qDebug("draw from (%d,%d) to (%d,%d)", y1, x1, y0, x0);                                
+                            }
+                            curimg_map[id] = (y0<<16) | x0;
                             break;
                         }
                     }
                     if (pmap==cache_map.end()) {
-                        qCritical("Repair me, Still not do");
+                        qWarning("Repair me, Still not do");
                     }
                 }
             } else
@@ -144,6 +185,10 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
 
         emit render_bkimg_done(layer, gcst.pixel2bu(render_rect_pixel), screen,
                        image, preq->second.load_queue.empty(), preq->first);
+        preq->second.pre_img = image;
+        preq->second.preimg_map = curimg_map;
+        preq->second.prev_w =w;
+        preq->second.prev_h =h;
         preq->second.last_render_time = RakNet::GetTimeMS();
         if (preq->second.load_queue.empty())
             preq->second.rt = NO_NEED_RETURN;
@@ -151,7 +196,8 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
 
     //Following code update preload queue
     if (preload_enable) {
-        int dmax = (rpixel.width()/gcst.img_block_w() + rpixel.height()/gcst.img_block_h()) * preload_para/20 +1;
+        int dmax = (rpixel.width()*preload_para/gcst.img_block_w() + rpixel.height()*preload_para/gcst.img_block_h())/20 +1;
+        dmax = (dmax==1) ? 2 : dmax;
         unsigned char s2 = min(scale+2, MAX_SCALE-1);
         for (int d=1; d<dmax; d++) {
             int x, y;
