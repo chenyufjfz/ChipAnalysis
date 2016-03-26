@@ -16,6 +16,7 @@ void ClientThread::end()
 
 void ClientThread::run()
 {
+    char server_ip[] = "127.0.0.1";
 
     RakNet::SocketDescriptor sd;
     sd.socketFamily = AF_INET;
@@ -24,7 +25,7 @@ void ClientThread::run()
 
     rak_peer = RakNet::RakPeerInterface::GetInstance();
     rak_peer->Startup(1,&sd, 1);
-    rak_peer->Connect("127.0.0.1", SERVER_PORT, 0,0);
+    rak_peer->Connect(server_ip, SERVER_PORT, 0,0);
 
     while (!finish)
     {
@@ -36,7 +37,7 @@ void ClientThread::run()
             case ID_CONNECTION_REQUEST_ACCEPTED:
                 qInfo("Server %s accept my connection.", packet->systemAddress.ToString());
                 server_addr = packet->systemAddress;
-                emit server_connected();
+                emit server_connected();             
                 break;
             case ID_NO_FREE_INCOMING_CONNECTIONS:
                 qWarning("Server is full.");
@@ -45,11 +46,13 @@ void ClientThread::run()
                 qInfo("Server %s disconnected.", packet->systemAddress.ToString());
                 server_addr = RakNet::SystemAddress();
                 emit server_disconnected();
+                rak_peer->Connect(server_ip, SERVER_PORT, 0,0);
                 break;
             case ID_CONNECTION_LOST:
                 qInfo("lost connection to server %s.", packet->systemAddress.ToString());
                 server_addr = RakNet::SystemAddress();
                 emit server_disconnected();
+                rak_peer->Connect(server_ip, SERVER_PORT, 0,0);
                 break;
 
             case ID_RESPONSE_BG_IMG:             
