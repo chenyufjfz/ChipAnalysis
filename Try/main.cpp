@@ -1,12 +1,25 @@
+#ifdef _DEBUG  
+#define New   new(_NORMAL_BLOCK, __FILE__, __LINE__)  
+#endif  
+#define CRTDBG_MAP_ALLOC    
+#include <stdlib.h>    
+#include <crtdbg.h>
+
 #include "iclayer.h"
 #include <iostream>
 #include <QRect>
 #include <stdio.h>
 #include <QBuffer>
 
+
 using namespace std;
 int test_raknet();
 int test_lmdb();
+int test_element0();
+int test_element1();
+int test_element_db0();
+int test_element_db1();
+
 void test_iclayer()
 {
     QString str = "../../M6.dat";
@@ -38,7 +51,16 @@ void test_iclayer()
 
 int main()
 {
+	//_CrtSetBreakAlloc(202);
     //test_lmdb();
     //test_raknet();
-    test_iclayer();
+    //test_iclayer();	
+	//test_element1();
+	//test_element0();	
+	//test_element_db0();
+	//test_element_db0();
+	test_element_db0();
+	test_element_db1();
+	_CrtDumpMemoryLeaks();
+	getchar();
 }

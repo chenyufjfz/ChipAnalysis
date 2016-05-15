@@ -322,7 +322,7 @@ void RenderImage::bkimg_packet_arrive(void * p)
            rsp_pkt->layer, rsp_pkt->scale, rsp_pkt->y, rsp_pkt->x, packet->length);
 
     //following code check checksum
-#if ENABLE_CHECK_SUM & 1
+#if ENABLE_CHECK_SUM_BKIMG & 1
     {
         CHECKSUM_TYPE cksum=0;
         CHECKSUM_TYPE *p = (CHECKSUM_TYPE *) &packet->data[sizeof(RspBkImgPkt)];

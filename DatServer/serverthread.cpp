@@ -19,7 +19,7 @@ CHECKSUM_TYPE get_bg_img(std::vector<uchar> & data, unsigned char layer, unsigne
     idx = idx*11+x;   
     bk_img.getRawImgByIdx(data, idx, scale, reserved);
     CHECKSUM_TYPE cksum=0;
-#if ENABLE_CHECK_SUM & 1
+#if ENABLE_CHECK_SUM_BKIMG & 1
     if (!data.empty()) {
         CHECKSUM_TYPE *p = (CHECKSUM_TYPE *) &data[reserved];
         for (unsigned i=reserved; i+sizeof(CHECKSUM_TYPE)<data.size(); p++, i+=sizeof(CHECKSUM_TYPE))
@@ -88,7 +88,7 @@ void ServerThread::run()
                             rsp_pkt->y = req_pkt->y;
                             rsp_pkt->layer = req_pkt->layer;
                             rsp_pkt->len = (unsigned)data.size() - sizeof(RspBkImgPkt);
-#if ENABLE_CHECK_SUM & 1
+#if ENABLE_CHECK_SUM_BKIMG & 1
                             rsp_pkt->check_sum = cksum;
 #endif
                             qInfo("Send bg_img l=%d, (%d,%d,%d), pkt_size=%d.", req_pkt->layer, req_pkt->scale,

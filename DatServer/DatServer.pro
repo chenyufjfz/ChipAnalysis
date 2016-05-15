@@ -24,7 +24,9 @@ SOURCES += main.cpp\
 HEADERS  += serverwindow.h \
     serverthread.h \
     communication.hpp \
-    iclayer.h
+    iclayer.h \
+    element_db.h \
+    element.h
 
 FORMS    += serverwindow.ui
 DESTDIR = $$_PRO_FILE_PWD_/../app

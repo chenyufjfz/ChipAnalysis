@@ -3,7 +3,7 @@
 #include "MessageIdentifiers.h"
 
 #define SERVER_PORT 13399
-#define ENABLE_CHECK_SUM 1
+#define ENABLE_CHECK_SUM_BKIMG 1
 typedef unsigned long long CHECKSUM_TYPE;
 enum GameMessages
 {
@@ -27,7 +27,7 @@ typedef struct {
     unsigned short x, y;
     unsigned int len;
     unsigned char layer;
-#if ENABLE_CHECK_SUM & 1
+#if ENABLE_CHECK_SUM_BKIMG & 1
     CHECKSUM_TYPE check_sum;
 #endif
 } RspBkImgPkt;
