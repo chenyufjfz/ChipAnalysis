@@ -324,7 +324,10 @@ int test_element_db0()
 	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
-	E(mdb_dbi_open(txn, NULL, MDB_INTEGERKEY, &dbi));
+	if (sizeof(DBID) == 4)
+		E(mdb_dbi_open(txn, NULL, MDB_INTEGERKEY, &dbi));
+	else
+		E(mdb_dbi_open(txn, NULL, 0, &dbi));
 	memset(&db_area_wire, 0, sizeof(db_area_wire));
 
 	DBID id(area, META_TYPE, AREA_WIREVIA_INFO);
@@ -443,7 +446,7 @@ int test_element_db0()
 	mdb_env_close(env);
 	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n", mst.ms_branch_pages, mst.ms_depth,
 		mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
-	printf("test_element_db0 success!");	
+	printf("test_element_db0 success!\n");	
 	return 0;
 }
 
@@ -624,7 +627,10 @@ int test_element_db1()
 	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
-	E(mdb_dbi_open(txn, NULL, MDB_INTEGERKEY, &dbi));
+	if (sizeof(DBID)==4)
+		E(mdb_dbi_open(txn, NULL, MDB_INTEGERKEY, &dbi));
+	else
+		E(mdb_dbi_open(txn, NULL, 0, &dbi));
 	memset(&db_area_wire, 0, sizeof(db_area_wire));
 
 	DBID id(area, META_TYPE, AREA_WIREVIA_INFO);
@@ -641,12 +647,12 @@ int test_element_db1()
 
 	MemAreaWireVia wp_set;
 
-	for (unsigned test_num = 0; test_num < 2000; test_num++) {
+	for (unsigned test_num = 0; test_num < 3000; test_num++) {
 		E(mdb_txn_begin(env, NULL, 0, &txn));
 		wp_set.renew(txn, dbi, area);
 		for (unsigned op_num = 0; op_num < 10; op_num++) {
 			unsigned op = rand() % 4096;
-			if (op < 1536) {
+			if (op < 1536) {//delete existing point
 				unsigned del = op;				
 				if (clone.size() <= del || clone[del] == NULL)
 					continue;
@@ -661,7 +667,7 @@ int test_element_db1()
 				clone[del] = NULL;				
 				continue;
 			}
-			if (op < 3072) {
+			if (op < 3072) { //add new point
 				unsigned char part = (rand() % 16) << 2;
 				SET_FIELD(part, TYPE, WIRE_TYPE);
 				id.set_id_part(part);
@@ -673,10 +679,10 @@ int test_element_db1()
 					return -1;
 				}
 				int rc;
-				if (rc = wp_set.add_point(*vwp) == 0) {
+				if ((rc = wp_set.add_point(*vwp)) == 0) {
 					if (del_num.empty()) {
 						clone.push_back(vwp);
-						map_set[vwp] = clone.size() - 1;
+						map_set[vwp] = (int) clone.size() - 1;
 					}
 					else {
 						clone[del_num.back()] = vwp;
@@ -689,6 +695,7 @@ int test_element_db1()
 				}				
 				continue;
 			}
+			//modify point
 			unsigned del = op - 3072;
 			if (clone.size() <= del || clone[del] == NULL)
 				continue;
@@ -708,7 +715,9 @@ int test_element_db1()
 		E(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn));
 		wp_set.renew(txn, dbi, area);
 		vector<MemVWPoint> db_vwp_set;
-		wp_set.get_points_all(db_vwp_set);
+		rc = wp_set.get_points_all(db_vwp_set);
+		if (rc != 0)
+			return -1;
 		for (int i = 0; i < db_vwp_set.size(); i++) {
 			map_set_iter = map_set.find(&db_vwp_set[i]);
 			if (map_set_iter == map_set.end()) {
@@ -737,5 +746,138 @@ int test_element_db1()
 	printf("csize=%d, dsize=%d, bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n", clone.size(), del_num.size(),
 		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
 	printf("test_element_db1 success!");
+	return 0;
+}
+
+void rand_xy_outarea(unsigned &x, unsigned &y, unsigned area)
+{
+	x = (rand() << 13) ^ rand();
+	do {
+		y = (rand() << 13) ^ rand();
+	} while (DBID::xy2id_area(x, y) == area);
+}
+int test_element_db2()
+{
+	unsigned area = 0x400400;
+	MDB_env *env;
+	MDB_txn *txn;
+	MDB_dbi dbi;
+	MDB_stat mst;
+	MDB_val key, data;
+	DBAreaWireVia db_area_wire;
+	int rc;
+	vector<DBExtWire *> clone;
+	vector<int> del_num;
+	map<DBExtWire *, int, DBExtWireCmp> map_set;
+	map<DBExtWire *, int, DBExtWireCmp>::iterator map_set_iter;
+
+	mdb_init();
+	srand(1);
+	remove("./db");
+	remove("./db-lock");
+	E(mdb_env_create(&env));
+	E(mdb_env_set_maxreaders(env, 2));
+	E(mdb_env_set_mapsize(env, 0x800000000));
+	E(mdb_env_set_maxdbs(env, 64));
+	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
+
+	E(mdb_txn_begin(env, NULL, 0, &txn));
+	if (sizeof(DBID) == 4)
+		E(mdb_dbi_open(txn, NULL, MDB_INTEGERKEY, &dbi));
+	else
+		E(mdb_dbi_open(txn, NULL, 0, &dbi));
+	memset(&db_area_wire, 0, sizeof(db_area_wire));
+
+	DBID id(area, META_TYPE, AREA_WIREVIA_INFO);
+	key.mv_size = sizeof(id);
+	key.mv_data = &id;
+	data.mv_size = sizeof(db_area_wire);
+	data.mv_data = &db_area_wire;
+	rc = mdb_put(txn, dbi, &key, &data, 0);
+	if (rc != 0) {
+		qCritical(mdb_strerror(rc));
+		return -1;
+	}
+	E(mdb_txn_commit(txn));
+
+	MemAreaWireVia wp_set;
+	for (unsigned test_num = 0; test_num < 2000; test_num++) {
+		E(mdb_txn_begin(env, NULL, 0, &txn));
+		wp_set.renew(txn, dbi, area);
+		for (unsigned op_num = 0; op_num < 10; op_num++) {
+			unsigned op = rand() % 256;
+			if (op < 128) { //delete existing ext wire
+				unsigned del = op;
+				if (clone.size() <= del || clone[del] == NULL)
+					continue;
+				if ((rc = wp_set.del_ext_wire(*clone[del])) < 0) {
+					printf("delete extern wire error %d", rc);
+					return -1;
+				}
+				map_set.erase(clone[del]);
+				delete clone[del];
+				del_num.push_back(del);
+				clone[del] = NULL;
+				continue;
+			}
+			//TODO add new wire
+			unsigned x0, y0, x1, y1;
+			unsigned char layer;			
+			rand_xy_outarea(x0, y0, area);
+			rand_xy_outarea(x1, y1, area);
+			layer = (rand() & 0xf) + 1;
+
+			DBExtWire * dbw = new DBExtWire(x0, y0, x1, y1, layer);			
+			if ((rc = wp_set.add_ext_wire(*dbw) == 0)) {
+				if (del_num.empty()) {
+					clone.push_back(dbw);
+					map_set[dbw] = (int) clone.size() - 1;
+				}
+				else {
+					clone[del_num.back()] = dbw;
+					map_set[dbw] = del_num.back();
+					del_num.pop_back();
+				}
+			}
+			else {
+				printf("DB add extern wire error %d", rc);
+				return -1;
+			}			
+		}
+		wp_set.close(true);
+		E(mdb_txn_commit(txn));
+
+		E(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn));
+		wp_set.renew(txn, dbi, area);
+		vector<DBExtWire> ext_wire_set;
+		rc = wp_set.get_ext_wire_all(ext_wire_set);
+		if (rc != 0)
+			return -1;
+		for (int i = 0; i < ext_wire_set.size(); i++) {
+			map_set_iter = map_set.find(&ext_wire_set[i]);
+			if (map_set_iter == map_set.end()) {
+				printf("found non-exist ext wire, check error");
+				return -1;
+			}
+			if (map_set_iter->second > clone.size() || clone[map_set_iter->second] == NULL) {
+				printf("test code internal error");
+				return -1;
+			}
+			if (!(*clone[map_set_iter->second] == ext_wire_set[i])) {
+				printf("extern wire not match, test code internal error");
+				return -1;
+			}
+		}
+		mdb_txn_abort(txn);
+	}
+	for (int i = 0; i < clone.size(); i++)
+		if (clone[i] != NULL)
+			delete clone[i];
+	E(mdb_env_stat(env, &mst));
+	mdb_dbi_close(env, dbi);
+	mdb_env_close(env);
+	printf("csize=%d, dsize=%d, bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n", clone.size(), del_num.size(),
+		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
+	printf("test_element_db2 success!");
 	return 0;
 }

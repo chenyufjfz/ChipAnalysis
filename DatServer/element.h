@@ -7,7 +7,8 @@ using namespace std;
 
 #define GET_FIELD(var, field) (((var) & field##_MASK) >> field##_SHIFT)
 #define SET_FIELD(var, field, num) var = ((unsigned)var & ~(field##_MASK)) | (((unsigned)(num) << field##_SHIFT) & field##_MASK)
-#define MAKE_U32(y, x) (((unsigned) (y) <<16) | (x))
+#define MAKE_U32(y, x) (((unsigned long) (y) <<16) | (x))
+#define MAKE_U64(y, x) (((unsigned long long) (y) <<32) | (x))
 
 
 #pragma pack(push)
@@ -92,6 +93,9 @@ struct DBID {
 #define INST_TYPE				1
 #define META_TYPE				2
 #define AREA_WIREVIA_INFO		0
+#define EXT_WIRE_NUM			2
+#define EXT_WIRE_START			1
+#define EXT_WIRE_END			(EXT_WIRE_START+EXT_WIRE_NUM-1)
 
 //for flag_in_mem
 #define IS_INMEM_MASK			0x80

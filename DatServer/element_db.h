@@ -5,7 +5,7 @@
 #include "element.h"
 #include "lmdb.h"
 #include <set>
-
+#include <stdlib.h>
 
 #pragma pack(push)
 #pragma pack(1)
@@ -14,11 +14,60 @@ typedef struct {
     unsigned pack_info; //layer_num(5), layer_min(5), layer_max(5) score(4), template(13), dir(3), flag(4), attach_ref(11)
 } DBPoint;
 
+#define EXTWIRE_LAYER_MASK 0x1f
+#define EXTWIRE_LAYER_SHIFT 0
+
+struct DBExtWire {
+	unsigned y0, x0, y1, x1;
+	unsigned short pack_info;
+	DBExtWire(unsigned x0_, unsigned y0_, unsigned x1_, unsigned y1_, unsigned char layer_) {
+		x0 = x0_;
+		x1 = x1_;
+		y0 = y0_;
+		y1 = y1_;
+		pack_info = 0;
+		SET_FIELD(pack_info, EXTWIRE_LAYER, layer_);
+	}
+	bool operator==(const DBExtWire &dbw) const {
+		if (x0 != dbw.x0 || y0 != dbw.y0 || x1 != dbw.x1 || y1 != dbw.y1 || pack_info != dbw.pack_info)
+			return false;
+		return true;
+	}
+};
+
+//can be unsigned char?
+typedef unsigned short DB_NUM_TYPE;
+
 typedef struct {						
-	unsigned char part_point_num[16][4];
+	DB_NUM_TYPE part_point_num[16][4];
+	DB_NUM_TYPE ext_wire_num[EXT_WIRE_NUM];
 } DBAreaWireVia;
 
 #pragma pack(pop)
+
+struct DBPointCmp {
+	bool operator ()(const DBPoint *lhs, const DBPoint *rhs) const {
+		if (lhs->y != rhs->y)
+			return lhs->y > rhs->y;
+		if (lhs->x != rhs->x)
+			return lhs->x > rhs->x;
+		return lhs->pack_info > rhs->pack_info;
+	}
+};
+
+struct DBExtWireCmp {
+	bool operator ()(const DBExtWire *lhs, const DBExtWire *rhs) const {
+		if (lhs->y0 != rhs->y0)
+			return lhs->y0 > rhs->y0;
+		if (lhs->x0 != rhs->x0)
+			return lhs->x0 > rhs->x0;
+		if (lhs->y1 != rhs->y1)
+			return lhs->y1 > rhs->y1;
+		if (lhs->x1 != rhs->x1)
+			return lhs->x1 > rhs->x1;
+		return lhs->pack_info > rhs->pack_info;
+	}
+};
 
 #define HASH_MASK	0x20
 #define SPLIT_TH	24
@@ -28,8 +77,11 @@ class MemAreaWireVia {
 protected:
 	DBAreaWireVia db_info;						//saved in database
 	unsigned short part_size[16][4];			//saved as data.size
+	unsigned short ext_wire_size[EXT_WIRE_NUM];
 	DBPoint * part_points[16][4];					//maybe point to memory or database	
+	DBExtWire * ext_wires[EXT_WIRE_NUM];
 	unsigned long long point_set_change;
+	unsigned ext_wire_change;
 	MDB_txn *txn;
 	MDB_dbi dbi;
 	unsigned area;
@@ -86,6 +138,7 @@ protected:
 		return 0;
 	}
 	
+	//part_points should be mdb_get from DB before call this
 	void alloc_part_mem(unsigned char part_id, unsigned size)
 	{
 		unsigned short cap;
@@ -116,6 +169,7 @@ protected:
 			while (cap < size + 2)
 				cap <<= 1;
 			new_part = (unsigned char *)malloc(cap);
+			Q_ASSERT(new_part != NULL);
 			*((unsigned short*)new_part) = cap;
 			new_part += 2;
 			memcpy(new_part, part_points[part_yx][local], old_size);
@@ -124,14 +178,51 @@ protected:
 		}
 	}
 
+	void alloc_ext_mem(unsigned char ext_wires_id, unsigned size)
+	{
+		unsigned old_size = ext_wire_size[ext_wires_id];
+		unsigned char * new_part;
+		unsigned short cap;
+
+		Q_ASSERT(size <= 64000 && ext_wires_id < EXT_WIRE_NUM);
+		ext_wire_size[ext_wires_id] = size;
+		if (((ext_wire_change >> ext_wires_id) & 1) == 0 || ext_wires[ext_wires_id] == NULL)  { //in database or empty
+			ext_wire_change |= 1 << ext_wires_id;
+			cap = 63;
+			while (cap < size + 2 || cap < old_size + 2)
+				cap <<= 1;
+			new_part = (unsigned char *)malloc(cap);
+			Q_ASSERT(new_part != NULL);
+			*((unsigned short*)new_part) = cap;
+			new_part += 2;
+			if (ext_wires[ext_wires_id] != NULL)
+				memcpy(new_part, ext_wires[ext_wires_id], old_size);
+			ext_wires[ext_wires_id] = (DBExtWire*)new_part;
+		}
+		cap = *((unsigned short*)(ext_wires[ext_wires_id]) - 1);
+		if (cap < size + 2) {
+			Q_ASSERT(old_size < size);
+			while (cap < size + 2)
+				cap <<= 1;
+			new_part = (unsigned char *)malloc(cap);
+			Q_ASSERT(new_part != NULL);
+			*((unsigned short*)new_part) = cap;
+			new_part += 2;
+			memcpy(new_part, ext_wires[ext_wires_id], old_size);
+			free((unsigned short*)(ext_wires[ext_wires_id]) - 1);
+			ext_wires[ext_wires_id] = (DBExtWire*)new_part;
+		}
+	}
+
 	int write_database()
 	{
 		MDB_val key, data;
 		unsigned long long change = point_set_change;
+		unsigned ext_change = ext_wire_change;
 		int rc;
 		Q_ASSERT(txn != NULL);
 
-		if (change == 0)
+		if (change == 0 && ext_change == 0)
 			return 0;
 
 		DBID id(area, META_TYPE, AREA_WIREVIA_INFO);
@@ -145,27 +236,44 @@ protected:
 			return -1;
 		}
 		for (int i = 0; i < 64; i++) {
-			unsigned part_y = i >> 4;
-			unsigned part_x = (i >> 2) & 3;
-			unsigned part = i >> 2;
-			unsigned local = i & 3;
-			DBID id(area, 0, part_x, part_y, local);
 			if (change & 1) {
+				unsigned part_y = i >> 4;
+				unsigned part_x = (i >> 2) & 3;
+				unsigned part = i >> 2;
+				unsigned local = i & 3;
+				DBID id(area, 0, part_x, part_y, local);			
 				key.mv_size = sizeof(id);
 				key.mv_data = &id;
 				data.mv_size = part_size[part][local];
 				data.mv_data = part_points[part][local];
 				if (part_size[part][local] == 0)
 					rc = mdb_del(txn, dbi, &key, &data);
-				else {
+				else 
 					rc = mdb_put(txn, dbi, &key, &data, 0);
-					if (rc != 0) {
-						qCritical(mdb_strerror(rc));
-						return -1;
-					}
-				}
+				if (rc != 0) {
+					qCritical(mdb_strerror(rc));
+					return -1;
+				}				
 			}
 			change = change >> 1;
+		}
+		for (int i = 0; i < EXT_WIRE_NUM; i++) {
+			if (ext_change & 1) {
+				DBID id(area, META_TYPE, EXT_WIRE_START + i);
+				key.mv_size = sizeof(id);
+				key.mv_data = &id;
+				data.mv_size = ext_wire_size[i];
+				data.mv_data = ext_wires[i];			
+				if (ext_wire_size[i] == 0)
+					rc = mdb_del(txn, dbi, &key, &data);
+				else
+					rc = mdb_put(txn, dbi, &key, &data, 0);
+				if (rc != 0) {
+					qCritical(mdb_strerror(rc));
+					return -1;
+				}
+			}
+			ext_change = ext_change >> 1;
 		}
 		return 0;
 	}
@@ -174,6 +282,7 @@ public:
 	MemAreaWireVia(MDB_txn * _txn = NULL, MDB_dbi _dbi = 0, unsigned _area = 0) 
 	{	
 		point_set_change = 0;
+		ext_wire_change = 0;
 		renew(_txn, _dbi, _area);
 	}
 
@@ -219,6 +328,23 @@ public:
 		return search_local;
 	}
 
+	unsigned char get_ext_wire_id(unsigned x, unsigned y)
+	{
+		unsigned char search_id = ((y + 2 * x) & HASH_MASK) ? 1 : 0;
+		if (db_info.ext_wire_num[0] == 0 && db_info.ext_wire_num[1] == 0)
+			search_id = EXT_WIRE_NUM;
+		else
+			if (db_info.ext_wire_num[0] == 0) {
+				if (search_id == 0)
+					search_id = EXT_WIRE_NUM;
+			}
+			else {
+				if (db_info.ext_wire_num[1] == 0)
+					search_id = 0;
+			}
+		return search_id;
+	}
+
 	int renew(MDB_txn *_txn, MDB_dbi _dbi, unsigned _area)
 	{
 		MDB_val key, data;
@@ -229,8 +355,11 @@ public:
 		dbi = _dbi;
 		area = _area;
 		point_set_change = 0;
+		ext_wire_change = 0;
 		memset(&part_points[0][0], 0, sizeof(part_points));		
 		memset(&part_size[0][0], 0, sizeof(part_size));
+		memset(&ext_wires, 0, sizeof(ext_wires));
+		memset(&ext_wire_size[0], 0, sizeof(ext_wire_size));
 		if (_txn == NULL) 
 			memset(&db_info, 0, sizeof(db_info));		
 		else {
@@ -250,10 +379,7 @@ public:
 
 	int close(bool submit)
 	{
-		if (point_set_change == 0)
-			return 0;
-
-		if (submit && point_set_change != 0)
+		if (submit)
 			if (write_database()!=0)
 				return -1;
 
@@ -265,6 +391,13 @@ public:
 			point_set_change = point_set_change >> 1;
 		}
 		point_set_change = 0;
+		
+		for (int i = 0; i < EXT_WIRE_NUM; i++) {
+			if (ext_wire_change & 1)
+				free((unsigned short*)(ext_wires[i]) - 1);
+			ext_wire_change = ext_wire_change >> 1;
+		}
+		ext_wire_change = 0;
 		return 0;
 	}
 
@@ -492,8 +625,11 @@ public:
 				unsigned char nmax = p.get_layer_max();
 				if (omax != 0 && nmax != 0) {
 					if ((omin >= nmin && omin <= nmax) || (omax >= nmin && omax <= nmax) ||
-						(nmin >= omin && nmin <= omax) || (nmax >= omin && nmax <= omax))
+						(nmin >= omin && nmin <= omax) || (nmax >= omin && nmax <= omax)) {
+						part_size[part_yx][local] = old_size; //TODO: avoid unnecessary point change
 						return -2;
+					}
+						
 				}
 			}
 			if (yx > local_yx) 
@@ -523,7 +659,182 @@ public:
 			split01(id);
 		return 0;
 	}
+
+	int get_ext_wire_all(vector<DBExtWire> & ext_wire_set)
+	{
+		ext_wire_set.clear();
+		for (int i = 0; i < EXT_WIRE_NUM; i++) {
+			if (db_info.ext_wire_num[i] != 0 && ext_wires[i] == NULL) {
+				DBID id(area, META_TYPE, EXT_WIRE_START + i);
+				MDB_val key, data;
+				int rc;
+				key.mv_size = sizeof(id);
+				key.mv_data = &id;
+				rc = mdb_get(txn, dbi, &key, &data);
+				if (rc != 0) {
+					qCritical(mdb_strerror(rc));
+					return -1;
+				}
+				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[i] * sizeof(DBExtWire));
+				ext_wires[i] = (DBExtWire *)data.mv_data;
+				ext_wire_size[i] = (unsigned short)data.mv_size;
+			}
+			ext_wire_set.insert(ext_wire_set.end(), ext_wires[i], ext_wires[i] + db_info.ext_wire_num[i]);
+		}
+		return 0;
+	}
+
+	int del_ext_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned char layer)
+	{
+		unsigned char search_id = get_ext_wire_id(x0, y0);
+		if (search_id >= EXT_WIRE_NUM)
+			return -1;
+		if (db_info.ext_wire_num[search_id] == 0)
+			return -1;
+		DBID id(area, META_TYPE, EXT_WIRE_START + search_id);
+		DBExtWire * search_set = ext_wires[search_id];
+		if (search_set == NULL) {
+			MDB_val key, data;
+			int rc;
+			key.mv_size = sizeof(id);
+			key.mv_data = &id;
+			rc = mdb_get(txn, dbi, &key, &data);
+			if (rc != 0) {
+				qCritical(mdb_strerror(rc));
+				return -1;
+			}
+			search_set = (DBExtWire *)data.mv_data;
+			ext_wires[search_id] = search_set;
+			Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
+			ext_wire_size[search_id] = (unsigned short)data.mv_size;
+		}
+
+		unsigned long long yx0 = MAKE_U64(y0, x0);
+		unsigned long long yx1 = MAKE_U64(y1, x1);
+		unsigned i;
+		for (i = 0; i < db_info.ext_wire_num[search_id]; i++) {
+			unsigned long long search_yx0 = MAKE_U64(search_set[i].y0, search_set[i].x0);
+
+			if (search_yx0 == yx0) {
+				unsigned long long search_yx1 = MAKE_U64(search_set[i].y1, search_set[i].x1);
+				if (search_yx1 == yx1) {
+					if (GET_FIELD(search_set[i].pack_info, EXTWIRE_LAYER) == layer)
+						break;
+				}
+				if (search_yx1 > yx1)
+					i = db_info.ext_wire_num[search_id];
+			}
+			if (search_yx0 > yx0)
+				i = db_info.ext_wire_num[search_id];
+		}
+
+		if (i < db_info.ext_wire_num[search_id]) {
+			db_info.ext_wire_num[search_id]--;
+			alloc_ext_mem(search_id, db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
+			memmove(&ext_wires[search_id][i], &ext_wires[search_id][i + 1],
+				(db_info.ext_wire_num[search_id] - i) * sizeof(DBExtWire));
+			return 0;
+		}
+		else
+			return -1;
+	}
+
+	int del_ext_wire(DBExtWire &ext_wire)
+	{
+		return del_ext_wire(ext_wire.x0, ext_wire.y0, ext_wire.x1, ext_wire.y1, GET_FIELD(ext_wire.pack_info, EXTWIRE_LAYER));
+	}
 	
+	void split_ext_wire()
+	{
+		DBExtWire * ext_wire2 = (DBExtWire *)malloc(db_info.ext_wire_num[0] * sizeof(DBExtWire));
+		unsigned ext_num2 = 0;
+		bool del = true;
+		while (del) {
+			del = false;
+			for (int i = 0; i < db_info.ext_wire_num[0]; i++) {
+				if ((ext_wires[0][i].y0 + 2 * ext_wires[0][i].x0) & HASH_MASK) {
+					ext_wire2[ext_num2++] = ext_wires[0][i];
+					del_ext_wire(ext_wires[0][i]);
+					del = true;
+					break;
+				}
+			}
+		}
+		db_info.ext_wire_num[1] = ext_num2;
+		alloc_ext_mem(1, ext_num2*sizeof(DBExtWire));
+		memcpy(ext_wires[1], ext_wire2, ext_num2 * sizeof(DBExtWire));
+		free(ext_wire2);
+	}
+	
+	int add_ext_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned char layer)
+	{
+		Q_ASSERT(DBID::xy2id_area(x0, y0) != area && DBID::xy2id_area(x1, y1) != area);
+		unsigned char search_id = get_ext_wire_id(x0, y0);
+		if (search_id >= EXT_WIRE_NUM)
+			search_id -= EXT_WIRE_NUM;
+		DBID id(area, META_TYPE, EXT_WIRE_START + search_id);	
+		if (db_info.ext_wire_num[search_id] != 0) {
+			DBExtWire * search_set = ext_wires[search_id];
+			if (search_set == NULL) {
+				MDB_val key, data;
+				int rc;
+				key.mv_size = sizeof(id);
+				key.mv_data = &id;
+				rc = mdb_get(txn, dbi, &key, &data);
+				if (rc != 0) {
+					qCritical(mdb_strerror(rc));
+					return -1;
+				}
+				search_set = (DBExtWire *)data.mv_data;
+				ext_wires[search_id] = search_set;
+				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
+				ext_wire_size[search_id] = (unsigned short)data.mv_size;
+			}
+		}
+		else
+			Q_ASSERT(ext_wire_size[search_id] == 0);
+				
+		DBExtWire * search_set = ext_wires[search_id];
+		unsigned long long yx0 = MAKE_U64(y0, x0);
+		unsigned long long yx1 = MAKE_U64(y1, x1);
+		unsigned i;
+		for (i = 0; i < db_info.ext_wire_num[search_id]; i++) {
+			unsigned long long search_yx0 = MAKE_U64(search_set[i].y0, search_set[i].x0);
+
+			if (search_yx0 == yx0) {
+				unsigned long long search_yx1 = MAKE_U64(search_set[i].y1, search_set[i].x1);
+				if (search_yx1 == yx1) {
+					if (GET_FIELD(search_set[i].pack_info, EXTWIRE_LAYER) == layer)
+						return -2;
+					else
+						break;
+				}
+				if (search_yx1 > yx1)
+					break;
+			}
+			if (search_yx0 > yx0)
+				break;
+		}
+
+		db_info.ext_wire_num[search_id]++;
+		alloc_ext_mem(search_id, db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
+		memmove(&ext_wires[search_id][i + 1], &ext_wires[search_id][i], (db_info.ext_wire_num[search_id] - i-1) * sizeof(DBExtWire));
+		ext_wires[search_id][i].x0 = x0;
+		ext_wires[search_id][i].y0 = y0;
+		ext_wires[search_id][i].x1 = x1;
+		ext_wires[search_id][i].y1 = y1;
+		ext_wires[search_id][i].pack_info = 0;
+		SET_FIELD(ext_wires[search_id][i].pack_info, EXTWIRE_LAYER, layer);
+
+		if (search_id == 0 && db_info.ext_wire_num[1] == 0 && db_info.ext_wire_num[0] > SPLIT_TH)
+			split_ext_wire();
+		return 0;
+	}
+
+	int add_ext_wire(DBExtWire & dbw)
+	{
+		return add_ext_wire(dbw.x0, dbw.y0, dbw.x1, dbw.y1, GET_FIELD(dbw.pack_info, EXTWIRE_LAYER));
+	}
 };
 
 
@@ -749,24 +1060,25 @@ int intersect(QLine l1, QLine l2, QPoint &point)
     return CENTERINTERSECTION;
 }
 
-class DBWorkArea {
+class DBProject {
 public:
+	DBProject(char * db_name, char * project_name, int max_reader);
     int add_wire(unsigned x0, unsigned y0, unsigned char l0, unsigned x1, unsigned y1, vector<PointPatch> & patch);
-    int add_via(unsigned x0, unsigned y0, unsigned char l0, unsigned char l1, vector<PointPatch> & patch);
+    /*int add_via(unsigned x0, unsigned y0, unsigned char l0, unsigned char l1, vector<PointPatch> & patch);
     int add_inst(unsigned x0, unsigned y0, unsigned short template_dir, vector<PointPatch> & patch);
     int add_connect(unsigned x0, unsigned y0, unsigned char l0, DBID id1,
                      unsigned x1, unsigned y1, unsigned short type, unsigned short port1, DBID id2, vector<PointPatch> & patch);
     int add_name(unsigned x0, unsigned y0, unsigned short type, DBID id, const char * name, vector<PointPatch> & patch);
     int add_parameter(unsigned x0, unsigned y0, unsigned short type, DBID id,
-                      const char * para_name, const char * para_data, vector<PointPatch> & patch);    
+                      const char * para_name, const char * para_data, vector<PointPatch> & patch);   */ 
     int del_wire(unsigned x0, unsigned y0, unsigned char l0, unsigned x1, unsigned y1, vector<PointPatch> & patch);
-    int del_via(unsigned x0, unsigned y0, DBID id, vector<PointPatch> & patch);
+    /*int del_via(unsigned x0, unsigned y0, DBID id, vector<PointPatch> & patch);
     int del_inst(unsigned x0, unsigned y0, unsigned short template_dir, DBID &id, vector<PointPatch> & patch);
     int del_connect(unsigned x0, unsigned y0, unsigned char l0, DBID id1,
                     unsigned x1, unsigned y1, unsigned short type, unsigned short port1, DBID id2, vector<PointPatch> & patch);
     int del_name(unsigned x0, unsigned y0, unsigned short type, DBID id, vector<PointPatch> & patch);
     int del_parameter(unsigned x0, unsigned y0, unsigned short type, DBID id,
                       const char * para_name, vector<PointPatch> & patch);
-    void get_point_set(unsigned area, unsigned get_method, const set <DBID> & exclude_set);
+    void get_point_set(unsigned area, unsigned get_method, const set <DBID> & exclude_set);*/
 };
 #endif // ELEMENT_DB_H

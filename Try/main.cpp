@@ -17,8 +17,10 @@ int test_raknet();
 int test_lmdb();
 int test_element0();
 int test_element1();
+
 int test_element_db0();
 int test_element_db1();
+int test_element_db2();
 
 void test_iclayer()
 {
@@ -58,9 +60,8 @@ int main()
 	//test_element1();
 	//test_element0();	
 	//test_element_db0();
-	//test_element_db0();
-	test_element_db0();
-	test_element_db1();
+	//test_element_db1();
+	test_element_db2();
 	_CrtDumpMemoryLeaks();
 	getchar();
 }
