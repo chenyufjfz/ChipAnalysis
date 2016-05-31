@@ -71,6 +71,14 @@ struct DBID {
     static unsigned xy2id_area(unsigned x, unsigned y) {
         return (((y & 0x1ffe0000) << 3) | ((x & 0x1ffe0000) >> 9)) >> 8;
     }
+	static unsigned gridx2areax(unsigned x)
+	{
+		return (x & 0x1ffe0000) >> 17;
+	}
+	static unsigned gridy2areay(unsigned y)
+	{
+		return (y & 0x1ffe0000) >> 17;
+	}
     static unsigned char grid2part(unsigned x) {
         return (x & 0x18000) >> 15;
     }
@@ -83,6 +91,16 @@ struct DBID {
     unsigned localy2grid(unsigned short local_y) {
         return ((id_main & 0xfff00000) >>3) | ((id_main & 0x30) << 11) | local_y;
     }
+	static void area2gridrect(unsigned areax, unsigned areay, unsigned & left, unsigned & top, unsigned & right, unsigned & bottom) {
+		left = areax << 17;
+		top = areay << 17;
+		right = left + (1 << 17) - 1;
+		bottom = top + (1 << 17) - 1;
+	}
+	static unsigned areaxy2area(unsigned areax, unsigned areay)
+	{
+		return (areay << 12) | areax;
+	}
 };
 #pragma pack(pop)
 
@@ -110,9 +128,10 @@ struct DBID {
 #define ATTACH_SIZE_SHIFT		0
 #define INST_ATTACH_SIZE_MASK	0xfff
 #define INST_ATTACH_SIZE_SHIFT	0
+//layer_num contain INST_LAYER
 #define LAYER_NUM_MASK			0xf8000000
 #define LAYER_NUM_SHIFT			27
-//if connect to no wire, layer_min = layer_max=0
+//if connect to no wire, layer_min = layer_max=0, layer_min, layer_max doesn't contain INST_LAYER
 #define LAYER_MIN_MASK			0x07c00000
 #define LAYER_MIN_SHIFT			22
 #define LAYER_MAX_MASK			0x003e0000
@@ -177,6 +196,12 @@ public:
     {
         return pack_info;
     }
+
+	void set_pack_info(unsigned pack_info_)
+	{
+		pack_info = pack_info_;
+	}
+
     /*
         insert: source string point
         insert_num: source string number, if only delete, insert_num=0
@@ -304,6 +329,8 @@ public:
         attach = NULL;
         pack_info = 0;
         flag_in_mem = 0;
+		part_id = 0;
+		SET_FIELD(part_id, TYPE, WIRE_TYPE);
     }
 
     //use this to create MemVWPoint point to database
@@ -317,6 +344,23 @@ public:
         flag_in_mem = 0;
     }
 
+	//use this to create MemVWPoint in one layer
+	MemVWPoint(unsigned x_, unsigned y_, unsigned char layer)
+	{
+		y = y_;
+		x = x_;
+		pack_info = 0;		
+		set_layer_num(1);
+		if (layer != INST_LAYER) {
+			set_layer_min(layer);
+			set_layer_max(layer);
+		}		
+		part_id = 0;
+		SET_FIELD(part_id, TYPE, WIRE_TYPE);
+		flag_in_mem = 0;
+		attach = NULL;
+	}
+
     MemVWPoint(const MemVWPoint &vwp)
     {
         y = vwp.y;
@@ -324,7 +368,7 @@ public:
         pack_info = vwp.pack_info;
         part_id = vwp.part_id;
         flag_in_mem = 0;
-
+		attach = NULL;
         //if attach point to database, shallow copy else deep copy
         if (vwp.get_isattach_inmem()) {
             int attach_size = vwp.get_attach_size();
@@ -367,6 +411,14 @@ public:
 			return false;
 
 		return (memcmp(attach, vwp.attach, get_attach_size()) == 0);			 
+	}
+
+	bool operator!=(const MemVWPoint &vwp) const
+	{
+		if (x != vwp.x || y != vwp.y || pack_info != vwp.pack_info)
+			return true;
+
+		return (memcmp(attach, vwp.attach, get_attach_size()) != 0);
 	}
 
     unsigned get_attach_size() const
@@ -643,7 +695,7 @@ public:
                     if (layer == get_layer_min()) {
 						Q_ASSERT(i == 0 || i == 1);
                         if (layer_num == i + 1)
-                            set_layer_min(0);
+                            set_layer_min(0); //no wire layer, only inst layer left
                         else                             
 							set_layer_min(GET_FIELD(attach[ref + 1], LAYER));                        
                     }
@@ -665,6 +717,7 @@ public:
 		return -1;
     }
 
+	//add connection to other point
 	//if success return 0, else return -1
     int add_noninst_wire(unsigned char layer, unsigned wx, unsigned wy)
     {
@@ -840,6 +893,16 @@ public:
     }
 };
 
+struct MemVWPointCmp {
+	bool operator ()(const MemVWPoint *lhs, const MemVWPoint *rhs) const
+	{		
+		if (lhs->y != rhs->y)
+			return lhs->y > rhs->y;
+		if (lhs->x != rhs->x)
+			return lhs->x > rhs->x;
+		return  lhs->get_layer_min() > rhs->get_layer_max();
+	}
+};
 
 #define INST_CONNECT_NUM_MASK	0x7
 #define INST_CONNECT_NUM_SHIFT	0
@@ -925,8 +988,16 @@ public:
 
 
 class PointPatch {
-	MemPoint * old_point;
-	MemPoint * new_point;	
+public:
+	vector<MemPoint *> old_points;
+	vector<MemPoint *> new_points;
+public:
+	~PointPatch() {
+		for (int i = 0; i < old_points.size(); i++)
+			delete old_points[i];
+		for (int i = 0; i < new_points.size(); i++)
+			delete new_points[i];
+	}	
 };
 #endif // ELEMENT_H
 

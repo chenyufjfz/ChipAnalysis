@@ -1,9 +1,11 @@
 #include "element_db.h"
+#include <iostream>
 #include <map>
+#include <set>
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))
 #define CHECK(test, msg) ((test) ? (void)0 : ((void)fprintf(stderr, \
-    "%s:%d: %s: %s\n", __FILE__, __LINE__, msg, mdb_strerror(rc)), abort()))
+    "%s:%d: %s: %d, %s\n", __FILE__, __LINE__, msg, rc, mdb_strerror(rc)), abort()))
 
 int test_element0()
 {
@@ -354,7 +356,7 @@ int test_element_db0()
 		MemVWPoint vwp(x0, y0, 0, 0, NULL);
 		vwp.add_noninst_wire(1, x0 + 0x10000, y0 + 0x10000);
 		vwp.add_inst_wire(x0 + 0x5000, y0 + 0x5000, 33);
-		wp_set.add_point(vwp);
+		E(wp_set.add_point(vwp));
 	}
 	wp_set.close(true);
 	E(mdb_txn_commit(txn));
@@ -745,7 +747,7 @@ int test_element_db1()
 	mdb_env_close(env);
 	printf("csize=%d, dsize=%d, bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n", clone.size(), del_num.size(),
 		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
-	printf("test_element_db1 success!");
+	printf("test_element_db1 success!\n");
 	return 0;
 }
 
@@ -878,6 +880,402 @@ int test_element_db2()
 	mdb_env_close(env);
 	printf("csize=%d, dsize=%d, bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n", clone.size(), del_num.size(),
 		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
-	printf("test_element_db2 success!");
+	printf("test_element_db2 success!\n");
+	return 0;
+}
+
+int test_cross()
+{
+	QLine l1(100, 100, 300, 100);
+	QLine l2(150, 100, 150, 300);
+	QLine l3(100, 200, 300, 200);
+	QLine l4(100, 100, 100, 300);
+	QLine l5(300, 100, 500, 100);
+	QLine l6(400, 100, 600, 100);
+	QLine l7(0, 0, 300, 300);
+	QLine l8(0, 100, 99, 100);
+	QLine l9(100, 100, 200, 200);
+	QLine l10(150, 0, 150, 301);
+	QLine l12(300, 300, 300, 100);
+	QLine l13(300, 300, 600, 0);
+	QLine l14(0, 600, 600, 0);
+	QLine l15(100, 99, 200, 99);
+	QLine l16(0, 599, 599, 0);
+	QLine l17(0, 199, 99, 100);
+	QLine l18(100, 99, 199, 0);
+	QLine l19(0, 50, 200, 150);
+	QPoint p;
+	if (intersect(l1, l2, p) != BOUNDINTERSECTION1)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l2, l1, p) != TEXTEND1)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l2, l3, p) != CENTERINTERSECTION)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l1, l3, p) != PARALLEL)
+		return -1;
+	if (intersect(l1, l4, p) != LEXTEND1)
+		return -1;
+	if (intersect(l4, l1, p) != LEXTEND1)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l3, l4, p) != TEXTEND1)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l1, l5, p) != EXTEND1)
+		return -1;
+	if (intersect(l1, l6, p) != PARALLEL)
+		return -1;
+	if (intersect(l5, l6, p) != EXTEND1)
+		return -1;
+	if (intersect(l6, l5, p) != EXTEND2)
+		return -1;
+	if (intersect(l6, l7, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l1, l7, p) != TEXTEND1)
+		return -1;
+	if (intersect(l7, l1, p) != BOUNDINTERSECTION1)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l2, l7, p) != CENTERINTERSECTION)
+		return -1;
+	if (intersect(l1, l8, p) != PARALLEL)
+		return -1;
+	if (intersect(l7, l8, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l7, l9, p) != INCLUDEEDBY)
+		return -1;
+	if (intersect(l9, l7, p) != INCLUDE)
+		return -1;
+	if (intersect(l10, l2, p) != INCLUDEEDBY)
+		return -1;
+	if (intersect(l2, l10, p) != INCLUDE)
+		return -1;
+	if (intersect(l12, l1, p) != LEXTEND2)
+		return -1;
+	if (intersect(l1, l12, p) != LEXTEND2)
+		return -1;
+	if (intersect(l3, l12, p) != TEXTEND2)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l12, l3, p) != BOUNDINTERSECTION2)
+		return -1;
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (intersect(l7, l13, p) != LEXTEND2)
+		return -1;
+	if (intersect(l13, l7, p) != LEXTEND1)
+		return -1;
+	if (intersect(l7, l14, p) != TEXTEND2)
+		return -1;
+	if (intersect(l14, l7, p) != BOUNDINTERSECTION2)
+		return -1;
+	if (intersect(l14, l2, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l7, l15, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l14, l16, p) != PARALLEL)
+		return -1;
+	if (intersect(l7, l16, p) != CENTERINTERSECTION)
+		return -1;
+	if (intersect(l7, l17, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l18, l7, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l19, l17, p) != NOINTERSECTION)
+		return -1;
+	if (intersect(l18, l19, p) != NOINTERSECTION)
+		return -1;
+	printf("test cross success\n");
+	return 0;
+}
+
+//if success, return 0
+int apply_patch(set<MemVWPoint *, MemVWPointCmp> & point_set, PointPatch & patch)
+{
+	set<MemVWPoint *, MemVWPointCmp>::iterator set_it;
+
+	for (int i = 0; i < patch.old_points.size(); i++) {
+		MemVWPoint * old_point = dynamic_cast<MemVWPoint *> (patch.old_points[i]);
+		if (old_point == NULL)
+			return -1;
+		set_it = point_set.find(old_point);
+		if (set_it == point_set.end())
+			return -2;
+		if (**set_it != *old_point)
+			return -2;
+		delete *set_it;
+		point_set.erase(set_it);		
+	}
+
+	for (int i = 0; i < patch.new_points.size(); i++) {
+		MemVWPoint * new_point = dynamic_cast<MemVWPoint *> (patch.new_points[i]);
+		if (new_point == NULL)
+			return -1;
+		set_it = point_set.find(new_point);
+		if (set_it != point_set.end())
+			return -2;
+		MemVWPoint * clone_point = new MemVWPoint(*new_point);
+		point_set.insert(clone_point);
+	}
+	return 0;
+}
+
+void decode_wire(unsigned wire, unsigned & x0, unsigned & y0, unsigned & x1, unsigned & y1, unsigned char & layer, int shift)
+{
+	layer = wire & 0xf;
+	x0 = (((wire & 0x00000070) >> 4) << 14) | (((wire & 0x00000780) >> 4) << (14+shift));
+	y0 = (((wire & 0x00003800) >> 11) << 14) | (((wire & 0x0003c000) >> 11) << (14+shift));
+	x1 = (((wire & 0x001c0000) >> 18) << 14) | (((wire & 0x01e00000) >> 18) << (14+shift));
+	y1 = (((wire & 0x0e000000) >> 25) << 14) | (((wire & 0xf0000000) >> 25) << (14+shift));
+	return;
+}
+
+unsigned encode_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned layer, int shift)
+{
+	unsigned area_x0, local_x0, area_y0, local_y0, area_x1, local_x1, area_y1, local_y1;
+	local_x0 = (x0 >> 14) & 0x7;
+	area_x0 = x0 >> (17 + shift);
+	local_x1 = (x1 >> 14) & 0x7;
+	area_x1 = x1 >> (17 + shift);
+	local_y0 = (y0 >> 14) & 0x7;
+	area_y0 = y0 >> (17 + shift);
+	local_y1 = (y1 >> 14) & 0x7;
+	area_y1 = y1 >> (17 + shift);
+	return layer | (local_x0 << 4) | (area_x0 << 7) | (local_y0 << 11) | (area_y0 << 14) |
+		(local_x1 << 18) | (area_x1 << 21) | (local_y1 << 25) | (area_y1 << 28);
+}
+
+unsigned char count_wire[128][128][4];
+unsigned rand_wire(unsigned area_num, unsigned local_num, unsigned layer_num)
+{
+	unsigned area_x0, local_x0, area_y0, local_y0, area_x1, local_x1, area_y1, local_y1;
+	unsigned char layer;
+	int r;
+	int ax, ay;
+	do {
+		r = rand();
+		area_x0 = (r & 0xff) % area_num;
+		local_x0 = (r >> 8) % local_num;
+		r = rand();
+		area_y0 = (r & 0xff) % area_num;
+		local_y0 = (r >> 8) % local_num;
+		layer = (rand() >> 5) % layer_num + 1;
+		ax = (area_x0 << 3) + local_x0;
+		ay = (area_y0 << 3) + local_y0;
+	} while (count_wire[ay][ax][layer] > 5);
+	do {
+		do {
+			r = rand();
+			area_x1 = (r & 0xff) % area_num;
+			local_x1 = (r >> 8) % local_num;
+		} while (area_x1 == area_x0 && local_x1 == local_x0);
+		do {
+			r = rand();
+			area_y1 = (r & 0xff) % area_num;
+			local_y1 = (r >> 8) % local_num;
+		} while (area_y1 == area_y0 && local_y1 == local_y0);		
+		r = rand();	
+		if (r & 0x100) {
+			if (r & 0x200) {
+				area_x1 = area_x0;
+				local_x1 = local_x0;
+			}
+			else {
+				area_y1 = area_y0;
+				local_y1 = local_y0;
+			}			
+		} 
+		ax = (area_x1 << 3) + local_x1;
+		ay = (area_y1 << 3) + local_y1;
+	} while (count_wire[ay][ax][layer] > 5);
+	return layer | (local_x0 << 4) | (area_x0 << 7) | (local_y0 << 11) | (area_y0 << 14) |
+		(local_x1 << 18) | (area_x1 << 21) | (local_y1 << 25) | (area_y1 << 28);
+}
+
+MemVWPoint * find_point(const set<MemVWPoint *, MemVWPointCmp> & point_set, MemVWPoint * p)
+{
+	set<MemVWPoint *, MemVWPointCmp>::iterator set_it;
+	set_it = point_set.find(p);
+	if (set_it == point_set.end())
+		return NULL;
+	else
+		return *set_it;
+}
+
+int test_element_draw0()
+{
+	MDB_env *env;
+	int rc;	
+	set<unsigned int> wire_set;
+	vector<unsigned int> clone_wire;
+	set<MemVWPoint *, MemVWPointCmp> point_set;
+	int shift = 0;
+	unsigned area_num = 8;
+	unsigned local_num = 4;
+	unsigned layer_num = 1;
+	MDB_stat mst;
+
+	mdb_init();
+	srand(1);
+	memset(count_wire, 0, sizeof(count_wire));
+
+	remove("./db");
+	remove("./db-lock");
+	E(mdb_env_create(&env));
+	E(mdb_env_set_maxreaders(env, 2));
+	E(mdb_env_set_mapsize(env, 0x800000000));
+	E(mdb_env_set_maxdbs(env, 64));
+	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
+
+	DBProject *prj = new DBProject(env, NULL);
+	for (int test_num = 100; test_num >=0; test_num--) {
+		E(prj->new_write_txn());
+		for (unsigned op_num = 0; op_num < 30; op_num++) {
+			unsigned op = rand() & 0xfff;
+			unsigned x0, y0, x1, y1;
+			unsigned char layer;
+			unsigned wire;
+			int ax, ay;
+			PointPatch patch;
+			if (test_num == 0) {
+				if (clone_wire.size() == 0)
+					break;
+				op = clone_wire.size() - 1;
+				op_num = 0;
+			}
+			if (op < 2000) {
+				if (op >= clone_wire.size())
+					continue;
+				wire = clone_wire[op];
+				decode_wire(wire, x0, y0, x1, y1, layer, shift);
+				clone_wire[op] = clone_wire.back();
+				clone_wire.pop_back();
+				wire_set.erase(wire);
+				MemVWPoint p0(x0, y0, layer), p1(x1, y1, layer);
+				MemVWPoint * del_p0 = find_point(point_set, &p0);
+				MemVWPoint * del_p1 = find_point(point_set, &p1);
+				if (del_p0 == NULL || del_p1 == NULL) {
+					printf("delete point not exist in point_set, check error");
+					return -1;
+				}
+				ax = (wire >> 4) & 0x7f;
+				ay = (wire >> 11) & 0x7f;
+				if (count_wire[ay][ax][layer] == 0) {
+					printf("Internal error");
+					return -1;
+				}
+				count_wire[ay][ax][layer]--;
+				ax = (wire >> 18) & 0x7f;
+				ay = (wire >> 25) & 0x7f;
+				if (count_wire[ay][ax][layer] == 0) {
+					printf("Internal error");
+					return -1;
+				}
+				count_wire[ay][ax][layer]--;
+				E(prj->del_wire_nocheck(*del_p0, *del_p1, layer, patch));
+				E(apply_patch(point_set, patch));
+			}
+			else {
+				wire = rand_wire(area_num, local_num, layer_num);
+				if (wire_set.find(wire) != wire_set.end())
+					continue;
+				decode_wire(wire, x0, y0, x1, y1, layer, shift);
+				unsigned wire1 = encode_wire(x1, y1, x0, y0, layer, shift);
+				if (wire_set.find(wire1) != wire_set.end())
+					continue;
+				ax = (wire >> 4) & 0x7f;
+				ay = (wire >> 11) & 0x7f;
+				count_wire[ay][ax][layer]++;
+				ax = (wire >> 18) & 0x7f;
+				ay = (wire >> 25) & 0x7f;
+				count_wire[ay][ax][layer]++;
+				clone_wire.push_back(wire);
+				wire_set.insert(wire);
+				MemVWPoint p0(x0, y0, layer), p1(x1, y1, layer);
+				MemVWPoint * ins_p0 = find_point(point_set, &p0);
+				MemVWPoint * ins_p1 = find_point(point_set, &p1);
+				if (ins_p0 == NULL) {
+					p0.set_pack_info(0);
+					ins_p0 = &p0;
+				}
+				if (ins_p1 == NULL) {
+					p1.set_pack_info(0);
+					ins_p1 = &p1;
+				}
+				E(prj->add_wire_nocheck(*ins_p0, *ins_p1, layer, patch));
+				E(apply_patch(point_set, patch));
+			}
+		}
+		E(prj->close_write_txn(true));
+		set<MemVWPoint *, MemVWPointCmp>::iterator point_it;
+		unsigned num = 0;
+		for (point_it = point_set.begin(); point_it != point_set.end(); point_it++) {
+			MemVWPoint * vwp = *point_it;
+			unsigned char layer;
+			unsigned wire;
+			layer = vwp->get_layer_min();
+			if (layer != vwp->get_layer_max() || layer==0) {
+				printf("point set error");
+				return -2;
+			}
+			if ((vwp->x & 0x3fff) != 0 || (vwp->y & 0x3fff) != 0) {
+				printf("point xy error");
+				return -3;
+			}
+			vector <PairPoint> rp;			
+			vwp->get_layer_wire(layer, rp);
+			for (int j = 0; j < rp.size(); j++) {
+				if ((rp[j].wp.x & 0x3fff) != 0 || (rp[j].wp.y & 0x3fff) != 0) {
+					printf("point connect xy error");
+					return -3;
+				}
+				wire = encode_wire(vwp->x, vwp->y, rp[j].wp.x, rp[j].wp.y, layer, shift);
+				if (wire_set.find(wire) == wire_set.end()) {
+					wire = encode_wire(rp[j].wp.x, rp[j].wp.y, vwp->x, vwp->y, layer, shift);
+					if (wire_set.find(wire) == wire_set.end()) {
+						printf("pointset mismatch error");
+						return -4;
+					}
+				}
+				num++;
+			}
+		}
+		if (num != wire_set.size() * 2) {
+			printf("wire num is error");
+			return -5;
+		}
+		num = 0;
+		for (unsigned area_y = 0; area_y < area_num; area_y++)
+			for (unsigned area_x = 0; area_x < area_num; area_x++) {
+				unsigned area = (area_y << 12) | area_x;
+				vector <MemVWPoint> points;
+				prj->get_internal_points(area, 0, points, false, true);
+				for (unsigned i = 0; i < points.size(); i++) {
+					point_it = point_set.find(&points[i]);
+					if (point_it == point_set.end()) {
+						printf("database found point should not exist");
+						return -5;
+					}
+					
+					if (points[i] != **point_it) {
+						printf("database compare mismatch error");
+						return -5;
+					}
+					num++;
+				}
+			}
+		if (num != point_set.size()) {
+			printf("database wire num is error");
+			return -5;
+		}
+	}
+	delete prj;
+	E(mdb_env_stat(env, &mst));
+	mdb_env_close(env);
+	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n",
+		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
+	printf("test_element_draw0 success\n");
 	return 0;
 }

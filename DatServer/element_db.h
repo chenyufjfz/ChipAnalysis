@@ -2,9 +2,10 @@
 #define ELEMENT_DB_H
 
 #include <QLine>
+#include <QRect>
 #include "element.h"
 #include "lmdb.h"
-#include <set>
+#include <map>
 #include <stdlib.h>
 
 #pragma pack(push)
@@ -16,6 +17,11 @@ typedef struct {
 
 #define EXTWIRE_LAYER_MASK 0x1f
 #define EXTWIRE_LAYER_SHIFT 0
+
+#define ERR_CHECK(expr) CHECK0((rc = (expr)) == MDB_SUCCESS, #expr)
+#define ERR_CHECK1(expr, ret) CHECK1((rc = (expr)) == MDB_SUCCESS, #expr, ret)
+#define CHECK0(test, msg) do {if (!(test)) { qInfo(msg); qCritical(mdb_strerror(rc)); return;}} while(0)
+#define CHECK1(test, msg, ret) do {if (!(test)) { qInfo(msg); qCritical(mdb_strerror(rc)); return ret;}} while(0)
 
 struct DBExtWire {
 	unsigned y0, x0, y1, x1;
@@ -69,8 +75,9 @@ struct DBExtWireCmp {
 	}
 };
 
-#define HASH_MASK	0x20
+#define HASH_SHIFT	9
 #define SPLIT_TH	24
+#define HASH_SPLIT(x,y) ((((y) >> 14) + ((x) >> 14) + ((x) >> HASH_SHIFT)) & 1)
 //Area contain 16(4*4) parts, each part have at most 4 entries, entry may be empty
 
 class MemAreaWireVia {
@@ -89,7 +96,8 @@ protected:
 	typedef pair<int, int> PII;
 
 protected:
-	int _get_point(DBID id, unsigned x, unsigned y, vector<MemVWPoint> & points, vector<PII> &idx, bool clone_point=false)
+	int _get_point(DBID id, unsigned x, unsigned y, vector<MemVWPoint> & points, vector<PII> &idx, 
+		bool clone_point=false, unsigned char layer=0xff)
 	{
 		points.clear();
 		idx.clear();
@@ -100,17 +108,13 @@ protected:
 
 		if (db_info.part_point_num[part_yx][local] == 0)
 			return 0;
-		DBPoint * search_set = part_points[part_yx][local];
+		DBPoint * search_set = part_points[part_yx][local]; //search_set point to x,y,pack_info
 		if (search_set == NULL) {			
 			MDB_val key, data;
 			int rc;
 			key.mv_size = sizeof(id);
 			key.mv_data = &id;
-			rc = mdb_get(txn, dbi, &key, &data);
-			if (rc != 0) {
-				qCritical(mdb_strerror(rc));
-				return -1;
-			}
+			ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 			search_set = (DBPoint *)data.mv_data;
 			part_points[part_yx][local] = search_set;
 			Q_ASSERT(data.mv_size <= 64000);
@@ -120,16 +124,18 @@ protected:
 		unsigned char * attach = (unsigned char *)&search_set[db_info.part_point_num[part_yx][local]];
 		unsigned offset = 0;
 		for (unsigned i = 0; i < db_info.part_point_num[part_yx][local]; i++) {
-			unsigned yx = MAKE_U32(search_set[i].y, search_set[i].x);
-			
+			unsigned yx = MAKE_U32(search_set[i].y, search_set[i].x);			
 			if (yx == local_yx) {
 				MemVWPoint point(x, y, search_set[i].pack_info, id.get_id_part(), 
-					attach + offset);				
-				points.push_back(point);
-				if (clone_point)
-					points[points.size() - 1].alloc_attach_mem(point.get_attach_size());
-				PII idx_new = make_pair(i, offset);
-				idx.push_back(idx_new);
+					attach + offset);
+				if (layer == 0xff || (layer == INST_LAYER && point.get_isto_inst()) 
+					|| (layer <= point.get_layer_max() && layer >= point.get_layer_min())) {
+					points.push_back(point);
+					if (clone_point)
+						points[points.size() - 1].alloc_attach_mem(point.get_attach_size());
+					PII idx_new = make_pair(i, offset);
+					idx.push_back(idx_new);
+				}				
 			}
 			if (yx > local_yx)
 				break;
@@ -230,11 +236,7 @@ protected:
 		key.mv_data = &id;
 		data.mv_size = sizeof(db_info);
 		data.mv_data = &db_info;
-		rc = mdb_put(txn, dbi, &key, &data, 0);
-		if (rc != 0) {
-			qCritical(mdb_strerror(rc));
-			return -1;
-		}
+		ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
 		for (int i = 0; i < 64; i++) {
 			if (change & 1) {
 				unsigned part_y = i >> 4;
@@ -247,13 +249,9 @@ protected:
 				data.mv_size = part_size[part][local];
 				data.mv_data = part_points[part][local];
 				if (part_size[part][local] == 0)
-					rc = mdb_del(txn, dbi, &key, &data);
+					mdb_del(txn, dbi, &key, &data);
 				else 
-					rc = mdb_put(txn, dbi, &key, &data, 0);
-				if (rc != 0) {
-					qCritical(mdb_strerror(rc));
-					return -1;
-				}				
+					ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
 			}
 			change = change >> 1;
 		}
@@ -265,40 +263,22 @@ protected:
 				data.mv_size = ext_wire_size[i];
 				data.mv_data = ext_wires[i];			
 				if (ext_wire_size[i] == 0)
-					rc = mdb_del(txn, dbi, &key, &data);
+					mdb_del(txn, dbi, &key, &data);
 				else
-					rc = mdb_put(txn, dbi, &key, &data, 0);
-				if (rc != 0) {
-					qCritical(mdb_strerror(rc));
-					return -1;
-				}
+					ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
 			}
 			ext_change = ext_change >> 1;
 		}
 		return 0;
 	}
 
-public:
-	MemAreaWireVia(MDB_txn * _txn = NULL, MDB_dbi _dbi = 0, unsigned _area = 0) 
-	{	
-		point_set_change = 0;
-		ext_wire_change = 0;
-		renew(_txn, _dbi, _area);
-	}
-
-	~MemAreaWireVia()
-	{
-		if (point_set_change)
-			close(false);
-	}
-
 	unsigned char get_local(unsigned x, unsigned y)
 	{
-		unsigned char search_local = ((y + 2 * x) & HASH_MASK) ? 2 : 0;
+		unsigned char search_local = HASH_SPLIT(x,y) ? 2 : 0;
 		unsigned char part_y = DBID::grid2part(y);
 		unsigned char part_x = DBID::grid2part(x);
 		unsigned char part_yx = part_y * 4 + part_x;
-		
+
 		if (db_info.part_point_num[part_yx][0] == 0 && db_info.part_point_num[part_yx][2] == 0)
 			search_local = 4;  //empty
 		else {
@@ -319,32 +299,50 @@ public:
 		}
 
 		if (search_local <= 3) {
-			if (db_info.part_point_num[part_yx][search_local + 1] != 0) {				
-				if ((2 * y + x) & HASH_MASK)
+			if (db_info.part_point_num[part_yx][search_local + 1] != 0) {
+				if (HASH_SPLIT(y,x))
 					search_local++;
 			}
 		}
-		
+
 		return search_local;
 	}
 
 	unsigned char get_ext_wire_id(unsigned x, unsigned y)
 	{
-		unsigned char search_id = ((y + 2 * x) & HASH_MASK) ? 1 : 0;
+		unsigned char search_id = HASH_SPLIT(x, y) ? 1 : 0;
 		if (db_info.ext_wire_num[0] == 0 && db_info.ext_wire_num[1] == 0)
 			search_id = EXT_WIRE_NUM;
 		else
 			if (db_info.ext_wire_num[0] == 0) {
-				if (search_id == 0)
-					search_id = EXT_WIRE_NUM;
+			if (search_id == 0)
+				search_id = EXT_WIRE_NUM;
 			}
 			else {
 				if (db_info.ext_wire_num[1] == 0)
 					search_id = 0;
 			}
-		return search_id;
+			return search_id;
 	}
 
+public:
+	MemAreaWireVia(MDB_txn * _txn = NULL, MDB_dbi _dbi = 0, unsigned _area = 0) 
+	{	
+		point_set_change = 0;
+		ext_wire_change = 0;
+		renew(_txn, _dbi, _area);
+	}
+
+	~MemAreaWireVia()
+	{
+		close(false);
+	}
+
+	unsigned get_area() const
+	{
+		return area;
+	}
+	
 	int renew(MDB_txn *_txn, MDB_dbi _dbi, unsigned _area)
 	{
 		MDB_val key, data;
@@ -367,18 +365,22 @@ public:
 			key.mv_size = sizeof(id);
 			key.mv_data = &id;			
 			rc = mdb_get(txn, dbi, &key, &data);
-			if (rc != 0) {
-				qCritical(mdb_strerror(rc));
-				return -1;
-			}
-			Q_ASSERT(data.mv_size == sizeof(db_info));
-			memcpy(&db_info, data.mv_data, sizeof(db_info));
+			if (rc == MDB_NOTFOUND) 
+				memset(&db_info, 0, sizeof(db_info));			
+			else {
+				ERR_CHECK1(rc, -1);
+				Q_ASSERT(data.mv_size == sizeof(db_info));
+				memcpy(&db_info, data.mv_data, sizeof(db_info));
+			}		
 		}
 		return 0;
 	}
 
 	int close(bool submit)
 	{
+		if (point_set_change == 0 && ext_wire_change == 0)
+			return 0;
+
 		if (submit)
 			if (write_database()!=0)
 				return -1;
@@ -401,8 +403,9 @@ public:
 		return 0;
 	}
 
-	//points is valid until database item contain points is changed
-	int get_point(unsigned x, unsigned y, vector<MemVWPoint> & points)
+	//points is valid until database item contain points is changed, caller can read/write return points
+	//if part_points is in database, return points is clone-on-write, if it is in memory, return points is already cloned
+	int get_point(unsigned x, unsigned y, vector<MemVWPoint> & points, unsigned char layer=0xff)
 	{
 		Q_ASSERT(DBID::xy2id_area(x, y) == area);
 		unsigned char search_local = get_local(x, y);
@@ -415,12 +418,15 @@ public:
 		DBID id(x, y, WIRE_TYPE, search_local);
 		if ((point_set_change >> id.get_id_part()) & 1)
 			clone = true; //in memory, need clone
-		return _get_point(id, x, y, points, idx, clone);		
+		return _get_point(id, x, y, points, idx, clone, layer);		
 	}
 
-	int get_points_all(vector<MemVWPoint> & points)
+	//caller can read/write return points
+	//if part_points is in database, return points is clone-on-write, if it is in memory, return points is already cloned
+	int get_points_all(vector<MemVWPoint> & points, bool append=false)
 	{
-		points.clear();
+		if (!append)
+			points.clear();
 		
 		for (unsigned char part_yx = 0; part_yx < 16; part_yx++)
 			for (unsigned char local = 0; local <= 3; local++) {
@@ -433,11 +439,7 @@ public:
 					int rc;
 					key.mv_size = sizeof(id);
 					key.mv_data = &id;
-					rc = mdb_get(txn, dbi, &key, &data);
-					if (rc != 0) {
-						qCritical(mdb_strerror(rc));
-						return -1;
-					}
+					ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 					search_set = (DBPoint *)data.mv_data;
 					part_points[part_yx][local] = search_set;
 					Q_ASSERT(data.mv_size <= 64000);
@@ -462,11 +464,13 @@ public:
 		return 0;
 	}
 
+	//if success return 0, else return nonzero
 	int del_point(const MemVWPoint & p)
 	{
 		return del_point(p.x, p.y, p.get_pack_info());
 	}
 
+	//if success return 0, else return nonzero
 	int del_point(unsigned x, unsigned y, unsigned pack_info)
 	{
 		unsigned char search_local = get_local(x, y);
@@ -476,7 +480,7 @@ public:
 		if (search_local > 3)
 			return -2;
 		DBID id(x, y, WIRE_TYPE, search_local);
-		if (_get_point(id, x, y, points, idx, false) < 0)
+		if (_get_point(id, x, y, points, idx, false, 0xff) < 0)
 			return -1;
 		/*I       O           Attach            p             q
 		  first   first + 1     0            second      second + size*/
@@ -504,6 +508,47 @@ public:
 		return -2;
 	}
 
+	//if success return 0, else return nonzero
+	//input x, y, layer, if layer==0xff, delete (x,y) point without compare layer
+	int del_point(unsigned x, unsigned y, unsigned char layer)
+	{
+		unsigned char search_local = get_local(x, y);
+		vector<MemVWPoint> points;
+		vector<PII> idx;
+
+		if (search_local > 3)
+			return -2;
+		DBID id(x, y, WIRE_TYPE, search_local);
+		if (_get_point(id, x, y, points, idx, false, 0xff) < 0)
+			return -1;
+		/*I       O           Attach            p             q
+		first   first + 1     0            second      second + size*/
+		unsigned char part_yx = id.get_id_part() >> 2;
+		for (int i = 0; i < points.size(); i++) {
+			if (layer == 0xff || (layer == INST_LAYER && points[i].get_isto_inst())
+				|| (layer <= points[i].get_layer_max() && layer >= points[i].get_layer_min()))
+			{
+				alloc_part_mem(id.get_id_part(), part_size[part_yx][search_local]);
+				memmove(part_points[part_yx][search_local] + idx[i].first,
+					part_points[part_yx][search_local] + idx[i].first + 1,
+					(db_info.part_point_num[part_yx][search_local] - idx[i].first - 1)*sizeof(DBPoint) + idx[i].second);
+				Q_ASSERT(part_size[part_yx][search_local] >= idx[i].second + points[i].get_attach_size() +
+					db_info.part_point_num[part_yx][search_local] * sizeof(DBPoint));
+
+				unsigned tail_size = part_size[part_yx][search_local] - idx[i].second - points[i].get_attach_size() -
+					db_info.part_point_num[part_yx][search_local] * sizeof(DBPoint);
+				unsigned char * point_t = (unsigned char *)(part_points[part_yx][search_local] + db_info.part_point_num[part_yx][search_local] - 1);
+				unsigned char * point_ot = (unsigned char *)(part_points[part_yx][search_local] + db_info.part_point_num[part_yx][search_local]);
+				memmove(point_t + idx[i].second, point_ot + idx[i].second + points[i].get_attach_size(), tail_size);
+				part_size[part_yx][search_local] -= (unsigned short)(sizeof(DBPoint) + points[i].get_attach_size());
+				db_info.part_point_num[part_yx][search_local]--;
+				return 0;
+			}
+		}
+
+		return -2;
+	}
+
 	void split02(DBID id)
 	{				
 		unsigned char part_yx = id.get_id_part() >> 2;
@@ -519,7 +564,7 @@ public:
 			unsigned char * attach0 = (unsigned char *)&part_points[part_yx][0][db_info.part_point_num[part_yx][0]];
 			for (int i = 0; i < db_info.part_point_num[part_yx][0]; i++) {
 				unsigned short size = GET_FIELD(part_points[part_yx][0][i].pack_info, ATTACH_SIZE);
-				if ((part_points[part_yx][0][i].y + 2 * part_points[part_yx][0][i].x) & HASH_MASK) {
+				if (HASH_SPLIT(part_points[part_yx][0][i].x, part_points[part_yx][0][i].y)) {
 					points2[point2_num++] = part_points[part_yx][0][i];
 					memcpy(attach2 + offset2, attach0 + offset0, size);
 					offset2 += size;
@@ -531,10 +576,12 @@ public:
 				offset0 += size;
 			}
 		}
-		alloc_part_mem(id.get_id_part() | 2, point2_num*sizeof(DBPoint) + offset2);
-		memcpy(part_points[part_yx][2], points2, point2_num*sizeof(DBPoint));
-		memcpy(part_points[part_yx][2] + point2_num, attach2, offset2);
-		db_info.part_point_num[part_yx][2] = point2_num;		
+		if (point2_num != 0) {
+			alloc_part_mem(id.get_id_part() | 2, point2_num*sizeof(DBPoint) + offset2);
+			memcpy(part_points[part_yx][2], points2, point2_num*sizeof(DBPoint));
+			memcpy(part_points[part_yx][2] + point2_num, attach2, offset2);
+			db_info.part_point_num[part_yx][2] = point2_num;
+		}		
 		free(points2);
 		free(attach2);
 	}
@@ -555,7 +602,7 @@ public:
 			unsigned char * attach0 = (unsigned char *)&part_points[part_yx][local][db_info.part_point_num[part_yx][local]];
 			for (int i = 0; i < db_info.part_point_num[part_yx][local]; i++) {
 				unsigned short size = GET_FIELD(part_points[part_yx][local][i].pack_info, ATTACH_SIZE);
-				if ((2 * part_points[part_yx][local][i].y + part_points[part_yx][local][i].x) & HASH_MASK) {
+				if (HASH_SPLIT(part_points[part_yx][local][i].y, part_points[part_yx][local][i].x)) {
 					points1[point1_num++] = part_points[part_yx][local][i];
 					memcpy(attach1 + offset1, attach0 + offset0, size);
 					offset1 += size;
@@ -568,14 +615,17 @@ public:
 				offset0 += size;
 			}
 		}
-		alloc_part_mem(id.get_id_part() | 1, point1_num*sizeof(DBPoint) + offset1);
-		memcpy(part_points[part_yx][local + 1], points1, point1_num*sizeof(DBPoint));
-		memcpy(part_points[part_yx][local + 1] + point1_num, attach1, offset1);
-		db_info.part_point_num[part_yx][local + 1] = point1_num;
+		if (point1_num != 0) {
+			alloc_part_mem(id.get_id_part() | 1, point1_num*sizeof(DBPoint) + offset1);
+			memcpy(part_points[part_yx][local + 1], points1, point1_num*sizeof(DBPoint));
+			memcpy(part_points[part_yx][local + 1] + point1_num, attach1, offset1);
+			db_info.part_point_num[part_yx][local + 1] = point1_num;
+		}		
 		free(points1);
 		free(attach1);
 	}
 
+	//if success, return 0
 	int add_point(const MemVWPoint & p)
 	{
 		unsigned char local = get_local(p.x, p.y);
@@ -596,11 +646,7 @@ public:
 				int rc;
 				key.mv_size = sizeof(id);
 				key.mv_data = &id;
-				rc = mdb_get(txn, dbi, &key, &data);
-				if (rc != 0) {
-					qCritical(mdb_strerror(rc));
-					return -1;
-				}
+				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 				search_set = (DBPoint *)data.mv_data;
 				part_points[part_yx][local] = search_set;
 				Q_ASSERT(data.mv_size <= 64000);
@@ -670,11 +716,7 @@ public:
 				int rc;
 				key.mv_size = sizeof(id);
 				key.mv_data = &id;
-				rc = mdb_get(txn, dbi, &key, &data);
-				if (rc != 0) {
-					qCritical(mdb_strerror(rc));
-					return -1;
-				}
+				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[i] * sizeof(DBExtWire));
 				ext_wires[i] = (DBExtWire *)data.mv_data;
 				ext_wire_size[i] = (unsigned short)data.mv_size;
@@ -698,11 +740,7 @@ public:
 			int rc;
 			key.mv_size = sizeof(id);
 			key.mv_data = &id;
-			rc = mdb_get(txn, dbi, &key, &data);
-			if (rc != 0) {
-				qCritical(mdb_strerror(rc));
-				return -1;
-			}
+			ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 			search_set = (DBExtWire *)data.mv_data;
 			ext_wires[search_id] = search_set;
 			Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
@@ -752,7 +790,7 @@ public:
 		while (del) {
 			del = false;
 			for (int i = 0; i < db_info.ext_wire_num[0]; i++) {
-				if ((ext_wires[0][i].y0 + 2 * ext_wires[0][i].x0) & HASH_MASK) {
+				if (HASH_SPLIT(ext_wires[0][i].x0, ext_wires[0][i].y0)) {
 					ext_wire2[ext_num2++] = ext_wires[0][i];
 					del_ext_wire(ext_wires[0][i]);
 					del = true;
@@ -761,11 +799,15 @@ public:
 			}
 		}
 		db_info.ext_wire_num[1] = ext_num2;
-		alloc_ext_mem(1, ext_num2*sizeof(DBExtWire));
-		memcpy(ext_wires[1], ext_wire2, ext_num2 * sizeof(DBExtWire));
+		if (ext_num2 != 0) {
+			alloc_ext_mem(1, ext_num2*sizeof(DBExtWire));
+			memcpy(ext_wires[1], ext_wire2, ext_num2 * sizeof(DBExtWire));
+		}
 		free(ext_wire2);
 	}
 	
+	//if success, return 0, else return non-zero
+	//internal set is order by (y0,x0), so better let (y0,x0)<(y1,x1) faster seaerch speed
 	int add_ext_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned char layer)
 	{
 		Q_ASSERT(DBID::xy2id_area(x0, y0) != area && DBID::xy2id_area(x1, y1) != area);
@@ -780,11 +822,7 @@ public:
 				int rc;
 				key.mv_size = sizeof(id);
 				key.mv_data = &id;
-				rc = mdb_get(txn, dbi, &key, &data);
-				if (rc != 0) {
-					qCritical(mdb_strerror(rc));
-					return -1;
-				}
+				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 				search_set = (DBExtWire *)data.mv_data;
 				ext_wires[search_id] = search_set;
 				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
@@ -804,8 +842,10 @@ public:
 			if (search_yx0 == yx0) {
 				unsigned long long search_yx1 = MAKE_U64(search_set[i].y1, search_set[i].x1);
 				if (search_yx1 == yx1) {
-					if (GET_FIELD(search_set[i].pack_info, EXTWIRE_LAYER) == layer)
+					if (GET_FIELD(search_set[i].pack_info, EXTWIRE_LAYER) == layer) {
+						qCritical("add existing external line");
 						return -2;
+					}						
 					else
 						break;
 				}
@@ -837,6 +877,11 @@ public:
 	}
 };
 
+struct MemAreaWireViaCmp {
+	bool operator ()(const MemAreaWireVia *lhs, const MemAreaWireVia *rhs) const {
+		return lhs->get_area() > rhs->get_area();
+	}
+};
 
 enum {
     PARALLEL,           // //
@@ -854,8 +899,7 @@ enum {
     EXTEND2             // [(])
 } ;
 
-bool get_cross(const QPoint & u1, const QPoint & u2, const QPoint & v1, const QPoint &v2, QPoint &p){
-    int x, y;
+bool get_cross(const QPoint & u1, const QPoint & u2, const QPoint & v1, const QPoint &v2, double &x, double &y){
     x = u1.x();
     y = u1.y();
     double a= (double)(u1.x()-u2.x())*(v1.y()-v2.y())-(double)(u1.y()-u2.y())*(v1.x()-v2.x());
@@ -864,25 +908,24 @@ bool get_cross(const QPoint & u1, const QPoint & u2, const QPoint & v1, const QP
         t=((double)(u1.x()-v1.x())*(v1.y()-v2.y())-(double)(u1.y()-v1.y())*(v1.x()-v2.x())) /a;
     x+=(u2.x()-u1.x())*t;
     y+=(u2.y()-u1.y())*t;
-    p.setX(x);
-    p.setY(y);
     return (a!=0);
 }
 
 bool online(const QLine &l, const QPoint &p)
 {
     double a= (double)(l.x1()-p.x())*(l.y2()-p.y())-(double)(l.y1()-p.y())*(l.x2()-p.x());
-    return (a!=0);
+    return (a==0);
 }
 
 #define SGN(x) (((x)>0) ? 1 : (((x)==0) ? 0 : -1))
-int intersect(QLine l1, QLine l2, QPoint &point)
+int intersect(const QLine & l1, const QLine & l2, QPoint &p)
 {
     Q_ASSERT(l1.x1()!=l1.x2() || l1.y1()!=l1.y2());
     Q_ASSERT(l2.x1()!=l2.x2() || l2.y1()!=l2.y2());
-
-    bool parallel = (!get_cross(l1.p1(), l1.p2(), l2.p1(), l2.p2(), point));
-
+	double x0, y0;
+    bool parallel = (!get_cross(l1.p1(), l1.p2(), l2.p1(), l2.p2(), x0, y0));
+	p.setX((int) x0);
+	p.setY((int) y0);
     int x11 = SGN(l1.x1() -l2.x1());
     int x12 = SGN(l1.x1() -l2.x2());
     int x21 = SGN(l1.x2() -l2.x1());
@@ -899,17 +942,17 @@ int intersect(QLine l1, QLine l2, QPoint &point)
     if (same_y && y11!=0)
         return parallel ? PARALLEL: NOINTERSECTION;
 
-    int x01 = SGN(point.x() -l2.x1());
-    int x02 = SGN(point.x() -l2.x2());
-    int x10 = SGN(l1.x1() -point.x());
-    int x20 = SGN(l1.x2() -point.x());
-    int y01 = SGN(point.y() -l2.y1());
-    int y02 = SGN(point.y() -l2.y2());
-    int y10 = SGN(l1.y1() -point.y());
-    int y20 = SGN(l1.y2() -point.y());
+    int x01 = SGN(x0 -l2.x1());
+    int x02 = SGN(x0 -l2.x2());
+    int x10 = SGN(l1.x1() -x0);
+    int x20 = SGN(l1.x2() -x0);
+    int y01 = SGN(y0 -l2.y1());
+    int y02 = SGN(y0 -l2.y2());
+    int y10 = SGN(l1.y1() -y0);
+    int y20 = SGN(l1.y2() -y0);
 
     if (l1.x1() ==l1.x2()) { //x11==x21, x12==x22
-        Q_ASSERT(point.x()==l1.x1());
+		Q_ASSERT(x0 == l1.x1());
         if (x11 ==x12) { //l1.x1()==l1.x2()==l2.x1()==l2.x2()
             Q_ASSERT(x11==0); //4 points in one line
             if (y11!=y12 && y21!=y22) //l1.y1 & l1.y2 is inside l2
@@ -952,7 +995,7 @@ int intersect(QLine l1, QLine l2, QPoint &point)
     }
 
     if (l1.y1() ==l1.y2()) { //y11==y21, y12==y22
-        Q_ASSERT(point.y()==l1.y1());
+		Q_ASSERT(y0 == l1.y1());
         if (y11==y12) { //l1.y1()==l1.y2()==l2.y1()==l2.y2()
             Q_ASSERT(y11==0); //4 points in one line
             if (x11!=x12 && x21!=x22) //l1.x1 & l1.x2 is inside l2
@@ -1012,7 +1055,6 @@ int intersect(QLine l1, QLine l2, QPoint &point)
 
     if (online(l1, l2.p1())) {
         if (parallel) {//4 points in one line
-            Q_ASSERT(y11==0); //4 points in one line
             if (x11!=x12 && x21!=x22) //l1.x1 & l1.x2 is inside l2
                 return INCLUDE;
             if (x11==x12 && x21!=x22) //l1.x1 is outside l2, l1.x2 is inside l2
@@ -1060,10 +1102,368 @@ int intersect(QLine l1, QLine l2, QPoint &point)
     return CENTERINTERSECTION;
 }
 
+bool cross_rect(const QRect & rect, const QLine & line)
+{
+	int rc;
+	QPoint p;
+	QLine up(rect.topLeft(), rect.bottomRight());
+	rc = intersect(up, line, p);
+	if (rc != PARALLEL && rc != NOINTERSECTION)
+		return true;
+	QLine right(rect.topRight(), rect.bottomLeft());
+	rc = intersect(up, line, p);
+	if (rc != PARALLEL && rc != CENTERINTERSECTION)
+		return true;
+	return false;
+}
+
+//return move distance, 0,1, 2
+int move_toward(int src_x, int src_y, int dst_x, int dst_y, unsigned & area_x, unsigned & area_y)
+{	
+	int a_x = area_x, a_y = area_y;
+	int dx = SGN((int)DBID::gridx2areax(dst_x) - a_x);
+	int dy = SGN((int)DBID::gridy2areay(dst_y) - a_y);
+	int ret = 1;
+	if (dx == 0 && dy == 0)
+		return 0;
+	if (dx == 0)
+		a_y += dy;
+	else
+		if (dy == 0)
+			a_x += dx;
+		else {
+			unsigned left, top, right, bottom;
+			DBID::area2gridrect(a_x + dx, a_y, left, top, right, bottom);
+			if (cross_rect(QRect(left, top, right - left + 1, bottom - top + 1),
+				QLine(src_x, src_y, dst_x, dst_y)))
+				a_x += dx;
+			else {
+				DBID::area2gridrect(a_x, a_y + dy, left, top, right, bottom);
+				if (cross_rect(QRect(left, top, right - left + 1, bottom - top + 1),
+					QLine(src_x, src_y, dst_x, dst_y)))
+					a_y += dy;
+				else {
+					a_x += dx;
+					a_y += dy;
+					ret = 2;
+				}
+			}
+
+		}
+	area_x = a_x;
+	area_y = a_y;
+	return ret;
+}
 class DBProject {
+protected:
+	map<unsigned, MemAreaWireVia *> modify_areas;
+	MDB_env * env;
+	MDB_txn * txn;
+	MDB_dbi dbi;
+	bool write_txn_active;
+protected:
+	MemAreaWireVia * get_area(unsigned area)
+	{
+		MemAreaWireVia * areavw;
+		map<unsigned, MemAreaWireVia *>::iterator find_area = modify_areas.find(area);
+		if (find_area == modify_areas.end()) {
+			areavw = new MemAreaWireVia(txn, dbi, area);
+			modify_areas[area] = areavw;
+		}
+		else
+			areavw = find_area->second;
+		return areavw;
+	}
 public:
-	DBProject(char * db_name, char * project_name, int max_reader);
-    int add_wire(unsigned x0, unsigned y0, unsigned char l0, unsigned x1, unsigned y1, vector<PointPatch> & patch);
+	DBProject(MDB_env *env_, char * db_name)
+	{
+		int rc = MDB_SUCCESS;
+		env = env_;
+		ERR_CHECK(mdb_txn_begin(env, NULL, 0, &txn));
+		if (sizeof(DBID) == 4)
+			rc = mdb_dbi_open(txn, db_name, MDB_INTEGERKEY, &dbi);
+		else
+			rc = mdb_dbi_open(txn, db_name, 0, &dbi);
+		if (rc != MDB_SUCCESS) {
+			mdb_txn_abort(txn);
+			qCritical(mdb_strerror(rc));
+			return;
+		}
+		ERR_CHECK(mdb_txn_commit(txn));
+	}
+
+	~DBProject()
+	{
+		if (write_txn_active) {
+			close_write_txn(false);
+			mdb_txn_abort(txn);
+		}		
+	}
+	int new_write_txn()
+	{
+		int rc;
+		ERR_CHECK1(mdb_txn_begin(env, NULL, 0, &txn), -1);
+		write_txn_active = true;
+		return 0;
+	}
+
+	int close_write_txn(bool submit)
+	{
+		int rc;
+		write_txn_active = false;
+		for (map<unsigned, MemAreaWireVia *>::iterator it = modify_areas.begin(); it != modify_areas.end(); it++) {
+			it->second->close(submit);
+			delete it->second;
+		}
+		modify_areas.clear();
+		if (submit) 
+			ERR_CHECK1(mdb_txn_commit(txn), -1);
+		else
+			mdb_txn_abort(txn);		
+		return 0;
+	}
+
+	//low level add wire, not checking wire intersection with other wire
+	//if success, return 0, else return non-zero
+	//input, vwp0, vwp1, these two point will be delete-modified-readd in database
+	//input layer
+	//output patch, old_points contain vwp0, vwp1, new_points contain vwp0, vwp1 after modified
+	int add_wire_nocheck(MemVWPoint & vwp0, MemVWPoint & vwp1, unsigned char layer, PointPatch & patch)
+	{
+		if (vwp0.x == vwp1.x && vwp0.y == vwp1.y)
+			return -10;
+		
+		MemVWPoint *p0, *p1, *new_p0, *new_p1;
+		if (vwp0.y < vwp1.y || (vwp0.y == vwp1.y && vwp0.x < vwp1.x)) {
+			p0 = new MemVWPoint(vwp0);
+			p1 = new MemVWPoint(vwp1);
+		}
+		else {
+			p0 = new MemVWPoint(vwp1);
+			p1 = new MemVWPoint(vwp0);
+		}
+
+		unsigned area0_x, area0_y, area0, area1_x, area1_y, area1;
+		int rc;
+		area0_x = DBID::gridx2areax(p0->x);
+		area0_y = DBID::gridy2areay(p0->y);
+		area0 = DBID::xy2id_area(p0->x, p0->y);
+		area1_x = DBID::gridx2areax(p1->x);
+		area1_y = DBID::gridy2areay(p1->y);
+		area1 = DBID::xy2id_area(p1->x, p1->y);
+
+		MemAreaWireVia * areavw0 = get_area(area0);
+		if (p0->get_pack_info() != 0)
+			if ((rc=areavw0->del_point(*p0)) != 0) {
+				qCritical("vw0 del point error %d", rc);
+				delete p0;
+				delete p1;
+				return -1;
+			}
+
+		MemAreaWireVia * areavw1 = get_area(area1);		
+		if (p1->get_pack_info() != 0) 
+			if ((rc=areavw1->del_point(*p1)) != 0) {
+				qCritical("vw1 del point error %d", rc);
+				delete p0;
+				delete p1;
+				return -2;
+			}
+
+		new_p0 = new MemVWPoint(*p0);		
+		if ((rc = new_p0->add_noninst_wire(layer, p1->x, p1->y)) != 0) {
+			qCritical("Pointp0 add wire error %d", rc);
+			delete new_p0;
+			delete p0;
+			delete p1;
+			return -3;
+		}
+		if ((rc = areavw0->add_point(*new_p0)) != 0) {
+			qCritical("areavw0 add wire error %d", rc);
+			delete new_p0;
+			delete p0;
+			delete p1;
+			return -3;
+		}
+
+		new_p1 = new MemVWPoint(*p1);
+		if ((rc=new_p1->add_noninst_wire(layer, p0->x, p0->y)) != 0) {
+			qCritical("Pointp1 add wire error %d", rc);
+			delete new_p0;
+			delete new_p1;
+			delete p0;
+			delete p1;
+			return -4;
+		}
+		if ((rc = areavw1->add_point(*new_p1)) != 0) {
+			qCritical("areavw1 add wire error %d", rc);
+			delete new_p0;
+			delete new_p1;
+			delete p0;
+			delete p1;
+			return -4;
+		}
+
+		if (area0 != area1) {
+			int step = 1;
+			step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			while (area0_x != area1_x || area0_y != area1_y) {
+				if (step >= 2) {
+					MemAreaWireVia * areavw;
+					unsigned area = DBID::areaxy2area(area0_x, area0_y);
+					areavw = get_area(area);					
+					if ((rc = areavw->add_ext_wire(p0->x, p0->y, p1->x, p1->y, layer)) != 0) {
+						qCritical("areavw add external wire error %d", rc);
+						delete new_p0;
+						delete new_p1;
+						delete p0;
+						delete p1;
+						return -5;
+					}
+					step = 0;
+				}
+				step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			}	
+		}
+		if (p0->get_pack_info() != 0)
+			patch.old_points.push_back(p0);
+		else
+			delete p0;
+		if (p1->get_pack_info() != 0)
+			patch.old_points.push_back(p1);
+		else
+			delete p1;
+		patch.new_points.push_back(new_p0);
+		patch.new_points.push_back(new_p1);
+		return 0;
+	}
+
+	//low level delete wire, not checking wire intersection with other wire
+	//if success, return 0, else return non-zero
+	//input, vwp0, vwp1, these two point will be delete in database
+	//output patch
+	int del_wire_nocheck(MemVWPoint & vwp0, MemVWPoint & vwp1, unsigned char layer, PointPatch & patch)
+	{
+		if (vwp0.x == vwp1.x && vwp0.y == vwp1.y)
+			return -10;
+		MemVWPoint *p0, *p1, *new_p0, *new_p1;
+		if (vwp0.y < vwp1.y || (vwp0.y == vwp1.y && vwp0.x < vwp1.x)) {
+			p0 = new MemVWPoint(vwp0);
+			p1 = new MemVWPoint(vwp1);
+		}
+		else {
+			p0 = new MemVWPoint(vwp1);
+			p1 = new MemVWPoint(vwp0);
+		}
+				
+		unsigned area0_x, area0_y, area0, area1_x, area1_y, area1;
+		int rc;
+		area0_x = DBID::gridx2areax(p0->x);
+		area0_y = DBID::gridy2areay(p0->y);
+		area0 = DBID::xy2id_area(p0->x, p0->y);
+		area1_x = DBID::gridx2areax(p1->x);
+		area1_y = DBID::gridy2areay(p1->y);
+		area1 = DBID::xy2id_area(p1->x, p1->y);
+
+		MemAreaWireVia * areavw0 = get_area(area0);
+		Q_ASSERT(p0->get_pack_info() != 0);
+		if (areavw0->del_point(*p0) != 0) {
+			delete p0;
+			delete p1;
+			return -1;
+		}
+
+		MemAreaWireVia * areavw1 = get_area(area1);
+		Q_ASSERT(p1->get_pack_info() != 0);
+		if (areavw1->del_point(*p1) != 0) {
+			delete p0;
+			delete p1;
+			return -2;
+		}
+
+		new_p0 = new MemVWPoint(*p0);		
+		if (new_p0->delete_layer_wire(layer, p1->x, p1->y) != 0) {
+			delete new_p0;
+			delete p0;
+			delete p1;
+			return -3;
+		}
+		if (new_p0->get_pack_info() != 0)
+			if (areavw0->add_point(*new_p0) != 0) {
+				delete new_p0;
+				delete p0;
+				delete p1;
+				return -3;
+			}
+
+		new_p1 = new MemVWPoint(*p1);		
+		if (new_p1->delete_layer_wire(layer, p0->x, p0->y) != 0) {
+			delete new_p0;
+			delete new_p1;
+			delete p0;
+			delete p1;
+			return -4;
+		}
+		if (new_p1->get_pack_info() != 0)
+			if (areavw1->add_point(*new_p1) != 0) {
+				delete new_p0;
+				delete new_p1;
+				delete p0;
+				delete p1;
+				return -4;
+			}
+		if (area0 != area1) {
+			int step = 1;
+			step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			while (area0_x != area1_x || area0_y != area1_y) {
+				if (step >= 2) {
+					MemAreaWireVia * areavw;
+					unsigned area = DBID::areaxy2area(area0_x, area0_y);
+					areavw = get_area(area);
+					if (areavw->del_ext_wire(p0->x, p0->y, p1->x, p1->y, layer) != 0) {
+						delete new_p0;
+						delete new_p1;
+						delete p0;
+						delete p1;
+						return -5;
+					}
+					step = 0;
+				}
+				step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			}
+		}
+		patch.old_points.push_back(p0);
+		patch.old_points.push_back(p1);
+		if (new_p0->get_pack_info() != 0)
+			patch.new_points.push_back(new_p0);
+		else
+			delete new_p0;
+		if (new_p1->get_pack_info() != 0)
+			patch.new_points.push_back(new_p1);
+		else
+			delete new_p1;
+		return 0;
+	}
+
+	int get_internal_points(unsigned area, unsigned get_method, vector<MemVWPoint> & points, bool append, bool from_database = true)
+	{
+		MemAreaWireVia * areavw;
+		if (from_database) {
+			int rc;
+			MDB_txn * txn_rd;
+			ERR_CHECK1(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn_rd), -1);			
+			areavw = new MemAreaWireVia(txn_rd, dbi, area);
+			areavw->get_points_all(points, append);
+			delete areavw;
+			mdb_txn_abort(txn_rd);
+		}
+		else {
+			areavw = get_area(area);
+			areavw->get_points_all(points, append);
+		}
+		return 0;
+	}
+
     /*int add_via(unsigned x0, unsigned y0, unsigned char l0, unsigned char l1, vector<PointPatch> & patch);
     int add_inst(unsigned x0, unsigned y0, unsigned short template_dir, vector<PointPatch> & patch);
     int add_connect(unsigned x0, unsigned y0, unsigned char l0, DBID id1,
@@ -1071,7 +1471,8 @@ public:
     int add_name(unsigned x0, unsigned y0, unsigned short type, DBID id, const char * name, vector<PointPatch> & patch);
     int add_parameter(unsigned x0, unsigned y0, unsigned short type, DBID id,
                       const char * para_name, const char * para_data, vector<PointPatch> & patch);   */ 
-    int del_wire(unsigned x0, unsigned y0, unsigned char l0, unsigned x1, unsigned y1, vector<PointPatch> & patch);
+
+
     /*int del_via(unsigned x0, unsigned y0, DBID id, vector<PointPatch> & patch);
     int del_inst(unsigned x0, unsigned y0, unsigned short template_dir, DBID &id, vector<PointPatch> & patch);
     int del_connect(unsigned x0, unsigned y0, unsigned char l0, DBID id1,
@@ -1079,6 +1480,6 @@ public:
     int del_name(unsigned x0, unsigned y0, unsigned short type, DBID id, vector<PointPatch> & patch);
     int del_parameter(unsigned x0, unsigned y0, unsigned short type, DBID id,
                       const char * para_name, vector<PointPatch> & patch);
-    void get_point_set(unsigned area, unsigned get_method, const set <DBID> & exclude_set);*/
+    */
 };
 #endif // ELEMENT_DB_H
