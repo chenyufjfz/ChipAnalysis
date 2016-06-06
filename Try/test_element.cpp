@@ -992,12 +992,12 @@ int test_cross()
 }
 
 //if success, return 0
-int apply_patch(set<MemVWPoint *, MemVWPointCmp> & point_set, PointPatch & patch)
+int apply_patch(set<MemVWPoint *, MemVWPointCmp> & point_set, vector<PointPatch*> & patch)
 {
 	set<MemVWPoint *, MemVWPointCmp>::iterator set_it;
-
-	for (int i = 0; i < patch.old_points.size(); i++) {
-		MemVWPoint * old_point = dynamic_cast<MemVWPoint *> (patch.old_points[i]);
+	Q_ASSERT(patch.size() == 1);
+	for (int i = 0; i < patch[0]->old_points.size(); i++) {
+		MemVWPoint * old_point = dynamic_cast<MemVWPoint *> (patch[0]->old_points[i]);
 		if (old_point == NULL)
 			return -1;
 		set_it = point_set.find(old_point);
@@ -1009,8 +1009,8 @@ int apply_patch(set<MemVWPoint *, MemVWPointCmp> & point_set, PointPatch & patch
 		point_set.erase(set_it);		
 	}
 
-	for (int i = 0; i < patch.new_points.size(); i++) {
-		MemVWPoint * new_point = dynamic_cast<MemVWPoint *> (patch.new_points[i]);
+	for (int i = 0; i < patch[0]->new_points.size(); i++) {
+		MemVWPoint * new_point = dynamic_cast<MemVWPoint *> (patch[0]->new_points[i]);
 		if (new_point == NULL)
 			return -1;
 		set_it = point_set.find(new_point);
@@ -1112,13 +1112,13 @@ int test_element_draw0()
 	vector<unsigned int> clone_wire;
 	set<MemVWPoint *, MemVWPointCmp> point_set;
 	int shift = 0;
-	unsigned area_num = 8;
+	unsigned area_num = 10;
 	unsigned local_num = 4;
 	unsigned layer_num = 1;
 	MDB_stat mst;
 
 	mdb_init();
-	srand(1);
+	srand(2);
 	memset(count_wire, 0, sizeof(count_wire));
 
 	remove("./db");
@@ -1130,7 +1130,7 @@ int test_element_draw0()
 	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
 
 	DBProject *prj = new DBProject(env, NULL);
-	for (int test_num = 100; test_num >=0; test_num--) {
+	for (int test_num =300; test_num >=0; test_num--) {
 		E(prj->new_write_txn());
 		for (unsigned op_num = 0; op_num < 30; op_num++) {
 			unsigned op = rand() & 0xfff;
@@ -1138,14 +1138,14 @@ int test_element_draw0()
 			unsigned char layer;
 			unsigned wire;
 			int ax, ay;
-			PointPatch patch;
+			vector<PointPatch*> patch;
 			if (test_num == 0) {
 				if (clone_wire.size() == 0)
 					break;
-				op = clone_wire.size() - 1;
+				op = (unsigned) clone_wire.size() - 1;
 				op_num = 0;
 			}
-			if (op < 2000) {
+			if (op < 2048) {
 				if (op >= clone_wire.size())
 					continue;
 				wire = clone_wire[op];
@@ -1207,6 +1207,7 @@ int test_element_draw0()
 				E(prj->add_wire_nocheck(*ins_p0, *ins_p1, layer, patch));
 				E(apply_patch(point_set, patch));
 			}
+			prj->free_patch(patch);
 		}
 		E(prj->close_write_txn(true));
 		set<MemVWPoint *, MemVWPointCmp>::iterator point_it;
@@ -1277,5 +1278,109 @@ int test_element_draw0()
 	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n",
 		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
 	printf("test_element_draw0 success\n");
+	return 0;
+}
+
+void rand_xy(int &x, int &y, unsigned max_x, unsigned max_y)
+{
+	x = ((rand() << 14) ^ rand()) & (max_x - 1);
+	y = ((rand() << 14) ^ rand()) & (max_y - 1);
+}
+
+int test_element_draw1()
+{
+	MDB_env *env;
+	int rc;
+	unsigned max_x = 0x1ffffff, max_y=0x1ffffff;
+	vector<PointPatch*> patch;
+	MDB_stat mst;
+
+	mdb_init();
+	srand(1);
+
+	remove("./db");
+	remove("./db-lock");
+	E(mdb_env_create(&env));
+	E(mdb_env_set_maxreaders(env, 2));
+	E(mdb_env_set_mapsize(env, 0x800000000));
+	E(mdb_env_set_maxdbs(env, 64));
+	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
+
+	DBProject *prj = new DBProject(env, NULL);
+
+	for (int test_num = 200000; test_num >= 0; test_num--) {
+		int x, y;
+		E(prj->new_write_txn());
+		rand_xy(x, y, max_x, max_y);
+		QLine shu(x, 0, x, max_y);
+		E(prj->add_wire(shu, 1, true, true, patch));
+		if (patch.size()!=1 || !patch[0]->old_points.empty() || patch[0]->new_points.size()!=2) {
+			printf("addline patch oldpoint should be empty, check error");
+			return -6;
+		}
+		E(prj->make_point_on_line(shu, QPoint(x, y), 1, patch));
+		prj->free_patch(patch);
+		E(prj->add_wire(QLine(0, y, x, y), 1, true, false, patch));
+		if (patch.size() != 1 || patch[0]->old_points.size() != 1 || patch[0]->new_points.size() != 2) {
+			printf("add point patch error");
+			return -8;
+		}
+		prj->free_patch(patch);
+		E(prj->add_wire(QLine(x, y, max_x, y), 1, false, true, patch));
+		if (patch.size() != 1 || patch[0]->old_points.size() != 1 || patch[0]->new_points.size() != 2) {
+			printf("add point patch error");
+			return -8;
+		}
+		prj->free_patch(patch);
+		for (unsigned op_num = 0; op_num < 21; op_num++) {
+			int x0, y0, x1, y1;
+			bool same_quad = true;
+			
+			rand_xy(x0, y0, max_x, max_y);
+			rand_xy(x1, y1, max_x, max_y);
+			if (SGN(x0 - x) * SGN(x1 - x) <= 0 || SGN(y0 - y) *SGN(y1 - y) <= 0)
+				same_quad = false;
+			if (x0 == x && y0 == y || x1 == x && y1 == y)
+				continue;
+			rc = prj->add_wire(QLine(x0, y0, x1, y1), 1, true, true, patch);
+			if (same_quad && rc != Success)  {
+				printf("add wire should success, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d", 
+					x, y, x0, y0, x1, y1);
+				return -1;
+			}
+			if (!same_quad && rc == Success) {
+				printf("add wire should fail, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d", 
+					x, y, x0, y0, x1, y1);
+				return -2;
+			}
+			if (rc != Success && !patch.empty()) {
+				printf("add wire fail patch should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+					x, y, x0, y0, x1, y1);
+				return -3;
+			}
+			if (rc == Success) {
+				if (!patch[0]->old_points.empty()) {
+					printf("addline patch oldpoint should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+						x, y, x0, y0, x1, y1);
+					return -4;
+				}
+				prj->free_patch(patch);
+				E(prj->delete_wire(QLine(x0, y0, x1, y1), QLine(x0, y0, x1, y1), 1, patch));
+				if (!patch[0]->new_points.empty()) {
+					printf("deleteline patch newpoint should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+						x, y, x0, y0, x1, y1);
+					return -5;
+				}
+				prj->free_patch(patch);
+			}			
+		}
+		E(prj->close_write_txn(false));
+	}
+	delete prj;
+	E(mdb_env_stat(env, &mst));
+	mdb_env_close(env);
+	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n",
+		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
+	printf("test_element_draw1 success\n");
 	return 0;
 }

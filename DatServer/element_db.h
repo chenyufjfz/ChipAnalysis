@@ -1,7 +1,6 @@
 #ifndef ELEMENT_DB_H
 #define ELEMENT_DB_H
 
-#include <QLine>
 #include <QRect>
 #include "element.h"
 #include "lmdb.h"
@@ -326,6 +325,11 @@ protected:
 	}
 
 public:
+	enum {
+		DO_CLONE,
+		NOT_CLONE,
+		AUTO_CLONE
+	};
 	MemAreaWireVia(MDB_txn * _txn = NULL, MDB_dbi _dbi = 0, unsigned _area = 0) 
 	{	
 		point_set_change = 0;
@@ -405,7 +409,7 @@ public:
 
 	//points is valid until database item contain points is changed, caller can read/write return points
 	//if part_points is in database, return points is clone-on-write, if it is in memory, return points is already cloned
-	int get_point(unsigned x, unsigned y, vector<MemVWPoint> & points, unsigned char layer=0xff)
+	int get_point(unsigned x, unsigned y, vector<MemVWPoint> & points, unsigned char layer = 0xff, int need_clone = AUTO_CLONE)
 	{
 		Q_ASSERT(DBID::xy2id_area(x, y) == area);
 		unsigned char search_local = get_local(x, y);
@@ -416,18 +420,20 @@ public:
 		if (search_local > 3)
 			return 0;
 		DBID id(x, y, WIRE_TYPE, search_local);
-		if ((point_set_change >> id.get_id_part()) & 1)
+		if ((((point_set_change >> id.get_id_part()) & 1) && need_clone == AUTO_CLONE) ||
+			need_clone == DO_CLONE)
 			clone = true; //in memory, need clone
 		return _get_point(id, x, y, points, idx, clone, layer);		
 	}
 
 	//caller can read/write return points
 	//if part_points is in database, return points is clone-on-write, if it is in memory, return points is already cloned
-	int get_points_all(vector<MemVWPoint> & points, bool append=false)
+	int get_points_all(vector<MemVWPoint> & points, bool append = false, unsigned char layer = 0xff, unsigned int need_clone = AUTO_CLONE)
 	{
 		if (!append)
 			points.clear();
-		
+		if (layer != 0xff)
+			Q_ASSERT(layer < 32);
 		for (unsigned char part_yx = 0; part_yx < 16; part_yx++)
 			for (unsigned char local = 0; local <= 3; local++) {
 				if (db_info.part_point_num[part_yx][local] == 0)
@@ -448,15 +454,19 @@ public:
 				Q_ASSERT(db_info.part_point_num[part_yx][local] * sizeof(DBPoint) < part_size[part_yx][local]);
 				unsigned char * attach = (unsigned char *)&search_set[db_info.part_point_num[part_yx][local]];
 				unsigned offset = 0;
-				for (unsigned i = 0; i < db_info.part_point_num[part_yx][local]; i++) {
+				for (unsigned i = 0; i < db_info.part_point_num[part_yx][local]; i++) {					
 					unsigned y = id.localy2grid(search_set[i].y);
 					unsigned x = id.localx2grid(search_set[i].x);
 				
 					MemVWPoint point(x, y, search_set[i].pack_info, id.get_id_part(),
 						attach + offset);
-					points.push_back(point);
-					if ((point_set_change >> id.get_id_part()) & 1)
-						points[points.size() - 1].alloc_attach_mem(point.get_attach_size()); //clone
+					if (layer == 0xff || (layer == INST_LAYER && point.get_isto_inst())
+						|| (layer <= point.get_layer_max() && layer >= point.get_layer_min())) {
+						points.push_back(point);
+						if ((((point_set_change >> id.get_id_part()) & 1) && need_clone == AUTO_CLONE) ||
+							need_clone == DO_CLONE)
+							points[points.size() - 1].alloc_attach_mem(point.get_attach_size()); //clone
+					}
 					offset += GET_FIELD(search_set[i].pack_info, ATTACH_SIZE);
 				}
 			}
@@ -875,6 +885,48 @@ public:
 	{
 		return add_ext_wire(dbw.x0, dbw.y0, dbw.x1, dbw.y1, GET_FIELD(dbw.pack_info, EXTWIRE_LAYER));
 	}
+
+
+	int intersect(const QLine & wire, unsigned char layer, bool exclude_p0, bool exclude_p1)
+	{
+		vector<MemVWPoint> points;
+		int rc;
+		get_points_all(points, false, layer, NOT_CLONE);
+		for (int i = 0; i < points.size(); i++) {
+			if (exclude_p0 && points[i].x == wire.x1() && points[i].y == wire.y1())
+				continue;
+			if (exclude_p1 && points[i].x == wire.x2() && points[i].y == wire.y2())
+				continue;
+			if ((rc = points[i].intersect(wire, layer, exclude_p0, exclude_p1)) != NOINTERSECTION)
+				return rc;
+		}
+		for (int i = 0; i < EXT_WIRE_NUM; i++) {
+			if (db_info.ext_wire_num[i] != 0 && ext_wires[i] == NULL) {
+				DBID id(area, META_TYPE, EXT_WIRE_START + i);
+				MDB_val key, data;
+				key.mv_size = sizeof(id);
+				key.mv_data = &id;
+				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
+				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[i] * sizeof(DBExtWire));
+				ext_wires[i] = (DBExtWire *)data.mv_data;
+				ext_wire_size[i] = (unsigned short)data.mv_size;
+			}
+			for (int j = 0; j < db_info.ext_wire_num[i]; j++) 
+				if (layer == GET_FIELD(ext_wires[i][j].pack_info, EXTWIRE_LAYER)) {
+					if (exclude_p0 && (ext_wires[i][j].x0 == wire.x1() && ext_wires[i][j].y0 == wire.y1() ||
+						ext_wires[i][j].x1 == wire.x1() && ext_wires[i][j].y1 == wire.y1()))
+						continue;
+					if (exclude_p1 && (ext_wires[i][j].x0 == wire.x2() && ext_wires[i][j].y0 == wire.y2() ||
+						ext_wires[i][j].x1 == wire.x2() && ext_wires[i][j].y1 == wire.y2()))
+						continue;
+					QPoint pp;
+					rc = ::intersect(QLine(ext_wires[i][j].x0, ext_wires[i][j].y0, ext_wires[i][j].x1, ext_wires[i][j].y1), wire, pp);
+					if (rc != NOINTERSECTION && rc != PARALLEL)
+						return rc;
+				}
+		}
+		return NOINTERSECTION;
+	}
 };
 
 struct MemAreaWireViaCmp {
@@ -882,240 +934,6 @@ struct MemAreaWireViaCmp {
 		return lhs->get_area() > rhs->get_area();
 	}
 };
-
-enum {
-    PARALLEL,           // //
-    NOINTERSECTION,     // \/
-    CENTERINTERSECTION, // X
-    BOUNDINTERSECTION1, // T heng
-    BOUNDINTERSECTION2, // T heng
-    TEXTEND1,           // T shu
-    TEXTEND2,           // T shu
-    LEXTEND1,           // L
-    LEXTEND2,           // L
-    INCLUDE,            // [()]
-    INCLUDEEDBY,        // ([])
-    EXTEND1,            // ([)]
-    EXTEND2             // [(])
-} ;
-
-bool get_cross(const QPoint & u1, const QPoint & u2, const QPoint & v1, const QPoint &v2, double &x, double &y){
-    x = u1.x();
-    y = u1.y();
-    double a= (double)(u1.x()-u2.x())*(v1.y()-v2.y())-(double)(u1.y()-u2.y())*(v1.x()-v2.x());
-    double t=0;
-    if (a!=0)
-        t=((double)(u1.x()-v1.x())*(v1.y()-v2.y())-(double)(u1.y()-v1.y())*(v1.x()-v2.x())) /a;
-    x+=(u2.x()-u1.x())*t;
-    y+=(u2.y()-u1.y())*t;
-    return (a!=0);
-}
-
-bool online(const QLine &l, const QPoint &p)
-{
-    double a= (double)(l.x1()-p.x())*(l.y2()-p.y())-(double)(l.y1()-p.y())*(l.x2()-p.x());
-    return (a==0);
-}
-
-#define SGN(x) (((x)>0) ? 1 : (((x)==0) ? 0 : -1))
-int intersect(const QLine & l1, const QLine & l2, QPoint &p)
-{
-    Q_ASSERT(l1.x1()!=l1.x2() || l1.y1()!=l1.y2());
-    Q_ASSERT(l2.x1()!=l2.x2() || l2.y1()!=l2.y2());
-	double x0, y0;
-    bool parallel = (!get_cross(l1.p1(), l1.p2(), l2.p1(), l2.p2(), x0, y0));
-	p.setX((int) x0);
-	p.setY((int) y0);
-    int x11 = SGN(l1.x1() -l2.x1());
-    int x12 = SGN(l1.x1() -l2.x2());
-    int x21 = SGN(l1.x2() -l2.x1());
-    int x22 = SGN(l1.x2() -l2.x2());
-    bool same_x = (x11==x12 && x21==x22 && x12==x21);
-    if  (same_x && x11!=0)
-        return parallel ? PARALLEL: NOINTERSECTION;
-
-    int y11 = SGN(l1.y1() -l2.y1());
-    int y12 = SGN(l1.y1() -l2.y2());
-    int y21 = SGN(l1.y2() -l2.y1());
-    int y22 = SGN(l1.y2() -l2.y2());
-    bool same_y = (y11==y12 && y21==y22 && y12==y21);
-    if (same_y && y11!=0)
-        return parallel ? PARALLEL: NOINTERSECTION;
-
-    int x01 = SGN(x0 -l2.x1());
-    int x02 = SGN(x0 -l2.x2());
-    int x10 = SGN(l1.x1() -x0);
-    int x20 = SGN(l1.x2() -x0);
-    int y01 = SGN(y0 -l2.y1());
-    int y02 = SGN(y0 -l2.y2());
-    int y10 = SGN(l1.y1() -y0);
-    int y20 = SGN(l1.y2() -y0);
-
-    if (l1.x1() ==l1.x2()) { //x11==x21, x12==x22
-		Q_ASSERT(x0 == l1.x1());
-        if (x11 ==x12) { //l1.x1()==l1.x2()==l2.x1()==l2.x2()
-            Q_ASSERT(x11==0); //4 points in one line
-            if (y11!=y12 && y21!=y22) //l1.y1 & l1.y2 is inside l2
-                return INCLUDE;
-            if (y11==y12 && y21!=y22) //l1.y1 is outside l2, l1.y2 is inside l2
-                return EXTEND1;
-            if (y11!=y12 && y21==y22) //l1.y1 is inside l2, l1.y2 is outside l2
-                return EXTEND2;
-
-            Q_ASSERT(y12!=y21);
-            return INCLUDEEDBY;
-        } else {
-            if (x11==0) { //l1.x1() ==l2.x1() = l1.x2(), 3 points in one line
-                if (y11==y21) //l2.y1 is outside l1
-                    return NOINTERSECTION;
-                if (y11==0)  //l1.y1()==l2.y1()
-                    return LEXTEND1;
-                if (y21==0)  //l1.y2()==l2.y1()
-                    return LEXTEND2;
-                return BOUNDINTERSECTION1;
-            }
-            if (x12==0) { //l1.x1()==l2.x2()=l1.x2()
-                if (y12==y22) //l2.y2 is outside l1
-                    return NOINTERSECTION;
-                if (y12==0) //l1.y1()==l2.y2()
-                    return LEXTEND1;
-                if (y22==0) //l1.y2()==l2.y2()
-                    return LEXTEND2;
-                return BOUNDINTERSECTION2;
-            }
-            //x11!=x12 && x11!=0 && x12!=0
-            if (y10==y20)
-                return NOINTERSECTION;
-            if (y10==0)
-                return TEXTEND1;
-            if (y20==0)
-                return TEXTEND2;
-            return CENTERINTERSECTION;
-        }
-    }
-
-    if (l1.y1() ==l1.y2()) { //y11==y21, y12==y22
-		Q_ASSERT(y0 == l1.y1());
-        if (y11==y12) { //l1.y1()==l1.y2()==l2.y1()==l2.y2()
-            Q_ASSERT(y11==0); //4 points in one line
-            if (x11!=x12 && x21!=x22) //l1.x1 & l1.x2 is inside l2
-                return INCLUDE;
-            if (x11==x12 && x21!=x22) //l1.x1 is outside l2, l1.x2 is inside l2
-                return EXTEND1;
-            if (x11!=x12 && x21==x22) //l1.x1 is inside l2, l1.x2 is outside l2
-                return EXTEND2;
-             //l1.x1 & l1.x2 is outside l2
-            Q_ASSERT(x12!=x21);
-            return INCLUDEEDBY;
-        } else {
-            if (y11==0) { //l1.y1() ==l2.y1() = l1.y2(), 3 points in one line
-                if (x11==x21) //l2.x1 is outside l1
-                    return NOINTERSECTION;
-                if (x11==0) //l1.x1()==l2.x1()
-                    return LEXTEND1;
-                if (x21==0) //l1.x2()==l2.x1()
-                    return LEXTEND2;
-                return BOUNDINTERSECTION1;
-            }
-            if (y12==0) { //l1.y1() ==l2.y2() = l1.y2(), 3 points in one line
-                if (x12==x22) //l2.x2 is outside l1
-                    return NOINTERSECTION;
-                if (x12==0) //l1.x1()==l2.x2()
-                    return LEXTEND1;
-                if (x22==0) //l1.x2()==l2.x2()
-                    return LEXTEND2;
-                return BOUNDINTERSECTION2;
-            }            
-            //y11!=y12 && y11!=0 && y12!=0
-            if (x10==x20) //cross point is outside l1
-                return NOINTERSECTION;
-            if (x10==0)
-                return TEXTEND1;
-            if (x20==0)
-                return TEXTEND2;
-            return CENTERINTERSECTION;
-        }
-    }    
-    /*判断交点是否在线段内还是在线段外
-    水平线,   必有 y01==y02==0
-               若点在线段外, x01==x02
-               若点在线段内, x01!=x02
-    垂直线,   必有 x01==x02==0
-               若点在线段外, y01==y02
-               若点在线段内, y01!=y02
-    斜线,       若点在线段外, x01==x02 && y01==y02
-               若点在线段内, x01!=x02 && y01!=y02
-
-    交点在线段外 <==> x01==x02 && y01==y02
-    交点在线段内 <==> x01!=x02 || y01!=y02
-     */
-
-    if (!parallel && (x10==x20 && y10==y20)) //cross point is outside l1
-        return NOINTERSECTION;
-
-    if (online(l1, l2.p1())) {
-        if (parallel) {//4 points in one line
-            if (x11!=x12 && x21!=x22) //l1.x1 & l1.x2 is inside l2
-                return INCLUDE;
-            if (x11==x12 && x21!=x22) //l1.x1 is outside l2, l1.x2 is inside l2
-                return EXTEND1;
-            if (x11!=x12 && x21==x22) //l1.x1 is inside l2, l1.x2 is outside l2
-                return EXTEND2;
-             //l1.x1 & l1.x2 is outside l2
-            Q_ASSERT(x12!=x21);
-            return INCLUDEEDBY;
-        } else {//3 points in one line
-            /*
-            if (x11==x21) //l2.x1 is outside l1
-                return NOINTERSECTION;*/
-            Q_ASSERT(x11!=x21); //because x11==x10, x21==x20
-            if (x11==0) //l1.x1()==l2.x1()
-                return LEXTEND1;
-            if (x21==0) //l1.x2()==l2.x1()
-                return LEXTEND2;
-            return BOUNDINTERSECTION1;
-        }
-    }
-
-    if (online(l1, l2.p2())) { //3 points in one line
-        Q_ASSERT(!parallel);
-        /*if (x12==x22) //l2.x2 is outside l1
-            return NOINTERSECTION;*/
-        Q_ASSERT(x12!=x22); //because x12==x10, x22==x20
-        if (x12==0) //l1.x1()==l2.x2()
-            return LEXTEND1;
-        if (x22==0) //l1.x2()==l2.x2()
-            return LEXTEND2;
-        return BOUNDINTERSECTION2;
-    }
-
-    if (parallel)
-        return PARALLEL;
-    //cross point is inside l1, and l1 is not 0 90 line
-    // !parallel && x10!=x20 && y10!=y20
-    if (x01==x02 && y01==y02)
-        return NOINTERSECTION;
-    if (online(l2, l1.p1()))
-        return TEXTEND1;
-    if (online(l2, l1.p2()))
-        return TEXTEND2;
-    return CENTERINTERSECTION;
-}
-
-bool cross_rect(const QRect & rect, const QLine & line)
-{
-	int rc;
-	QPoint p;
-	QLine up(rect.topLeft(), rect.bottomRight());
-	rc = intersect(up, line, p);
-	if (rc != PARALLEL && rc != NOINTERSECTION)
-		return true;
-	QLine right(rect.topRight(), rect.bottomLeft());
-	rc = intersect(up, line, p);
-	if (rc != PARALLEL && rc != CENTERINTERSECTION)
-		return true;
-	return false;
-}
 
 //return move distance, 0,1, 2
 int move_toward(int src_x, int src_y, int dst_x, int dst_y, unsigned & area_x, unsigned & area_y)
@@ -1143,9 +961,11 @@ int move_toward(int src_x, int src_y, int dst_x, int dst_y, unsigned & area_x, u
 					QLine(src_x, src_y, dst_x, dst_y)))
 					a_y += dy;
 				else {
+					DBID::area2gridrect(a_x + dx, a_y + dy, left, top, right, bottom);
+					Q_ASSERT(cross_rect(QRect(left, top, right - left + 1, bottom - top + 1),
+						QLine(src_x, src_y, dst_x, dst_y)));
 					a_x += dx;
-					a_y += dy;
-					ret = 2;
+					ret = 1;
 				}
 			}
 
@@ -1154,6 +974,26 @@ int move_toward(int src_x, int src_y, int dst_x, int dst_y, unsigned & area_x, u
 	area_y = a_y;
 	return ret;
 }
+
+enum {
+	Success=0,
+	ERR_INVALIDPARAM,
+	ERR_PointSame,
+	ERR_PointP0NotExist,
+	ERR_PointP0Exist,
+	ERR_PointP1NotExist,
+	ERR_PointP1Exist,
+	ERR_PointP2NotExist,
+	ERR_PointP3NotExist,
+	ERR_PointP0LineFull,
+	ERR_PointP1LineFull,
+	ERR_DelLineNotExist,
+	ERR_AddLineExist,
+	ERR_AddLineIntersect,
+	ERR_PointAddFail,
+	ERR_Internal,
+};
+
 class DBProject {
 protected:
 	map<unsigned, MemAreaWireVia *> modify_areas;
@@ -1228,10 +1068,10 @@ public:
 	//input, vwp0, vwp1, these two point will be delete-modified-readd in database
 	//input layer
 	//output patch, old_points contain vwp0, vwp1, new_points contain vwp0, vwp1 after modified
-	int add_wire_nocheck(MemVWPoint & vwp0, MemVWPoint & vwp1, unsigned char layer, PointPatch & patch)
-	{
+	int add_wire_nocheck(const MemVWPoint & vwp0, const MemVWPoint & vwp1, unsigned char layer, vector<PointPatch *> & patches)
+	{		
 		if (vwp0.x == vwp1.x && vwp0.y == vwp1.y)
-			return -10;
+			return ERR_PointSame;
 		
 		MemVWPoint *p0, *p1, *new_p0, *new_p1;
 		if (vwp0.y < vwp1.y || (vwp0.y == vwp1.y && vwp0.x < vwp1.x)) {
@@ -1258,7 +1098,7 @@ public:
 				qCritical("vw0 del point error %d", rc);
 				delete p0;
 				delete p1;
-				return -1;
+				return ERR_PointP0NotExist;
 			}
 
 		MemAreaWireVia * areavw1 = get_area(area1);		
@@ -1267,7 +1107,7 @@ public:
 				qCritical("vw1 del point error %d", rc);
 				delete p0;
 				delete p1;
-				return -2;
+				return ERR_PointP1NotExist;
 			}
 
 		new_p0 = new MemVWPoint(*p0);		
@@ -1276,14 +1116,14 @@ public:
 			delete new_p0;
 			delete p0;
 			delete p1;
-			return -3;
+			return ERR_PointP0LineFull;
 		}
 		if ((rc = areavw0->add_point(*new_p0)) != 0) {
 			qCritical("areavw0 add wire error %d", rc);
 			delete new_p0;
 			delete p0;
 			delete p1;
-			return -3;
+			return ERR_PointAddFail;
 		}
 
 		new_p1 = new MemVWPoint(*p1);
@@ -1293,7 +1133,7 @@ public:
 			delete new_p1;
 			delete p0;
 			delete p1;
-			return -4;
+			return ERR_PointP1LineFull;
 		}
 		if ((rc = areavw1->add_point(*new_p1)) != 0) {
 			qCritical("areavw1 add wire error %d", rc);
@@ -1301,51 +1141,58 @@ public:
 			delete new_p1;
 			delete p0;
 			delete p1;
-			return -4;
+			return ERR_PointAddFail;
 		}
 
 		if (area0 != area1) {
-			int step = 1;
-			step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
 			while (area0_x != area1_x || area0_y != area1_y) {
-				if (step >= 2) {
-					MemAreaWireVia * areavw;
-					unsigned area = DBID::areaxy2area(area0_x, area0_y);
-					areavw = get_area(area);					
-					if ((rc = areavw->add_ext_wire(p0->x, p0->y, p1->x, p1->y, layer)) != 0) {
-						qCritical("areavw add external wire error %d", rc);
-						delete new_p0;
-						delete new_p1;
-						delete p0;
-						delete p1;
-						return -5;
-					}
-					step = 0;
-				}
-				step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+				MemAreaWireVia * areavw;
+				unsigned area = DBID::areaxy2area(area0_x, area0_y);
+				areavw = get_area(area);					
+				if ((rc = areavw->add_ext_wire(p0->x, p0->y, p1->x, p1->y, layer)) != 0) {
+					qCritical("areavw add external wire error %d", rc);
+					delete new_p0;
+					delete new_p1;
+					delete p0;
+					delete p1;
+					return ERR_AddLineExist;
+				}					
+				move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
 			}	
 		}
-		if (p0->get_pack_info() != 0)
-			patch.old_points.push_back(p0);
-		else
+		PointPatch * patch = new PointPatch();
+		if (p0->get_pack_info() != 0) {
+			patch->old_points.push_back(p0);
+			patch->action |= ADDLINE_MODIFY_P0;
+		}			
+		else {
+			patch->action |= ADDLINE_CREATE_P0;
 			delete p0;
-		if (p1->get_pack_info() != 0)
-			patch.old_points.push_back(p1);
-		else
+		}			
+		if (p1->get_pack_info() != 0) {
+			patch->old_points.push_back(p1);
+			patch->action |= ADDLINE_MODIFY_P1;
+		}			
+		else {
+			patch->action |= ADDLINE_CREATE_P1;
 			delete p1;
-		patch.new_points.push_back(new_p0);
-		patch.new_points.push_back(new_p1);
-		return 0;
+		}			
+		patch->new_points.push_back(new_p0);
+		patch->new_points.push_back(new_p1);
+		patches.push_back(patch);
+		return Success;
 	}
 
 	//low level delete wire, not checking wire intersection with other wire
 	//if success, return 0, else return non-zero
 	//input, vwp0, vwp1, these two point will be delete in database
 	//output patch
-	int del_wire_nocheck(MemVWPoint & vwp0, MemVWPoint & vwp1, unsigned char layer, PointPatch & patch)
-	{
+	int del_wire_nocheck(const MemVWPoint & vwp0, const MemVWPoint & vwp1, unsigned char layer, vector<PointPatch*> & patches)
+	{		
 		if (vwp0.x == vwp1.x && vwp0.y == vwp1.y)
 			return -10;
+		
 		MemVWPoint *p0, *p1, *new_p0, *new_p1;
 		if (vwp0.y < vwp1.y || (vwp0.y == vwp1.y && vwp0.x < vwp1.x)) {
 			p0 = new MemVWPoint(vwp0);
@@ -1370,7 +1217,7 @@ public:
 		if (areavw0->del_point(*p0) != 0) {
 			delete p0;
 			delete p1;
-			return -1;
+			return ERR_PointP0NotExist;
 		}
 
 		MemAreaWireVia * areavw1 = get_area(area1);
@@ -1378,71 +1225,83 @@ public:
 		if (areavw1->del_point(*p1) != 0) {
 			delete p0;
 			delete p1;
-			return -2;
+			return ERR_PointP1NotExist;
 		}
 
 		new_p0 = new MemVWPoint(*p0);		
-		if (new_p0->delete_layer_wire(layer, p1->x, p1->y) != 0) {
+		if ((rc = new_p0->delete_layer_wire(layer, p1->x, p1->y)) != 0) {
+			qCritical("PointP0 delete wire error=%d", rc);
 			delete new_p0;
 			delete p0;
 			delete p1;
-			return -3;
+			return ERR_DelLineNotExist;
 		}
 		if (new_p0->get_pack_info() != 0)
-			if (areavw0->add_point(*new_p0) != 0) {
+			if ((rc = areavw0->add_point(*new_p0)) != 0) {
+				qCritical("areavw %d delete wire error=%d", area0, rc);
 				delete new_p0;
 				delete p0;
 				delete p1;
-				return -3;
+				return ERR_PointAddFail;
 			}
 
 		new_p1 = new MemVWPoint(*p1);		
-		if (new_p1->delete_layer_wire(layer, p0->x, p0->y) != 0) {
+		if ((rc = new_p1->delete_layer_wire(layer, p0->x, p0->y)) != 0) {
+			qCritical("PointP1 delete wire error=%d", rc);
 			delete new_p0;
 			delete new_p1;
 			delete p0;
 			delete p1;
-			return -4;
+			return ERR_DelLineNotExist;
 		}
 		if (new_p1->get_pack_info() != 0)
-			if (areavw1->add_point(*new_p1) != 0) {
+			if ((rc = areavw1->add_point(*new_p1)) != 0) {
+				qCritical("areavw %d delete wire error=%d", area1, rc);
 				delete new_p0;
 				delete new_p1;
 				delete p0;
 				delete p1;
-				return -4;
+				return ERR_PointAddFail;
 			}
 		if (area0 != area1) {
-			int step = 1;
-			step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
-			while (area0_x != area1_x || area0_y != area1_y) {
-				if (step >= 2) {
-					MemAreaWireVia * areavw;
-					unsigned area = DBID::areaxy2area(area0_x, area0_y);
-					areavw = get_area(area);
-					if (areavw->del_ext_wire(p0->x, p0->y, p1->x, p1->y, layer) != 0) {
-						delete new_p0;
-						delete new_p1;
-						delete p0;
-						delete p1;
-						return -5;
-					}
-					step = 0;
+			move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+			while (area0_x != area1_x || area0_y != area1_y) {				
+				MemAreaWireVia * areavw;
+				unsigned area = DBID::areaxy2area(area0_x, area0_y);
+				areavw = get_area(area);
+				if ((rc = areavw->del_ext_wire(p0->x, p0->y, p1->x, p1->y, layer)) != 0) {
+					qCritical("areavw %d del external wire error %d", area, rc);
+					delete new_p0;
+					delete new_p1;
+					delete p0;
+					delete p1;
+					return ERR_Internal;
 				}
-				step += move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
+				move_toward(p0->x, p0->y, p1->x, p1->y, area0_x, area0_y);
 			}
 		}
-		patch.old_points.push_back(p0);
-		patch.old_points.push_back(p1);
-		if (new_p0->get_pack_info() != 0)
-			patch.new_points.push_back(new_p0);
-		else
+		PointPatch * patch = new PointPatch();
+		patch->old_points.push_back(p0);
+		patch->old_points.push_back(p1);
+		if (new_p0->get_pack_info() != 0) {
+			patch->new_points.push_back(new_p0);
+			patch->action |= DELLINE_MODIFY_P0;
+		}			
+		else {
+			patch->action |= DELLINE_DELETE_P0;
 			delete new_p0;
-		if (new_p1->get_pack_info() != 0)
-			patch.new_points.push_back(new_p1);
-		else
+		}
+			
+		if (new_p1->get_pack_info() != 0) {
+			patch->action |= DELLINE_MODIFY_P1;
+			patch->new_points.push_back(new_p1);
+		}			
+		else {
+			patch->action |= DELLINE_DELETE_P1;
 			delete new_p1;
-		return 0;
+		}			
+		patches.push_back(patch);
+		return Success;
 	}
 
 	int get_internal_points(unsigned area, unsigned get_method, vector<MemVWPoint> & points, bool append, bool from_database = true)
@@ -1453,17 +1312,229 @@ public:
 			MDB_txn * txn_rd;
 			ERR_CHECK1(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn_rd), -1);			
 			areavw = new MemAreaWireVia(txn_rd, dbi, area);
-			areavw->get_points_all(points, append);
+			areavw->get_points_all(points, append, 0xff, MemAreaWireVia::AUTO_CLONE);
 			delete areavw;
 			mdb_txn_abort(txn_rd);
 		}
 		else {
 			areavw = get_area(area);
-			areavw->get_points_all(points, append);
+			areavw->get_points_all(points, append, 0xff, MemAreaWireVia::AUTO_CLONE);
 		}
 		return 0;
 	}
 
+	void free_patch(vector<PointPatch*> & patch)
+	{
+		for (int i = 0; i < patch.size(); i++)
+			delete patch[i];
+		patch.clear();
+	}
+
+	//if success return 0, else return nonzero
+	int add_wire(const QLine & wire, unsigned char layer, bool p0_is_new, bool p1_is_new, vector<PointPatch*> & patch)
+	{
+		if (wire.x1() == wire.x2() && wire.y1() == wire.y2())
+			return ERR_INVALIDPARAM;
+		unsigned area0_x, area0_y, area0, area1_x, area1_y, area1;
+		int rc;
+		area0_x = DBID::gridx2areax(wire.x1());
+		area0_y = DBID::gridy2areay(wire.y1());
+		area0 = DBID::xy2id_area(wire.x1(), wire.y1());
+		area1_x = DBID::gridx2areax(wire.x2());
+		area1_y = DBID::gridy2areay(wire.y2());
+		area1 = DBID::xy2id_area(wire.x2(), wire.y2());
+
+		vector<MemVWPoint> p0, p1;
+		MemAreaWireVia * areavw0 = get_area(area0);
+		areavw0->get_point(wire.x1(), wire.y1(), p0, layer, MemAreaWireVia::DO_CLONE);
+		if (p0_is_new) {			
+			if (!p0.empty())
+				return ERR_PointP0Exist;
+			p0.push_back(MemVWPoint(wire.x1(), wire.y1()));
+		}
+		else
+			if (p0.empty())
+				return ERR_PointP0NotExist;
+		Q_ASSERT(p0.size() == 1);
+		MemAreaWireVia * areavw1 = get_area(area1);
+		areavw1->get_point(wire.x2(), wire.y2(), p1, layer, MemAreaWireVia::DO_CLONE);
+		if (p1_is_new) {
+			if (!p1.empty())
+				return ERR_PointP1Exist;
+			p1.push_back(MemVWPoint(wire.x2(), wire.y2()));
+		}
+		else
+			if (p1.empty())
+				return ERR_PointP1NotExist;
+		Q_ASSERT(p1.size() == 1);
+
+		if ((rc = areavw0->intersect(wire, layer, !p0_is_new, !p1_is_new)) != NOINTERSECTION) {
+			//qWarning("add line intersect with existing line");
+			return ERR_AddLineIntersect;
+		}
+
+		while (area0_x != area1_x || area0_y != area1_y) {
+			move_toward(wire.x1(), wire.y1(), wire.x2(), wire.y2(), area0_x, area0_y);
+			MemAreaWireVia * areavw;
+			unsigned area = DBID::areaxy2area(area0_x, area0_y);
+			areavw = get_area(area);
+			if ((rc = areavw->intersect(wire, layer, !p0_is_new, !p1_is_new)) != NOINTERSECTION) {
+				//qWarning("add line intersect with existing line");
+				return ERR_AddLineIntersect;
+			}
+		} 
+
+		return add_wire_nocheck(p0[0], p1[0], layer, patch);
+	}
+
+	int make_point_on_line(const QLine & wire, QPoint & point, unsigned char layer, vector<PointPatch *> & patches)
+	{
+		if (wire.x1() == wire.x2() && wire.y1() == wire.y2())
+			return ERR_INVALIDPARAM;
+
+		unsigned area0, area1;
+		int rc;
+		area0 = DBID::xy2id_area(wire.x1(), wire.y1());
+		area1 = DBID::xy2id_area(wire.x2(), wire.y2());
+
+		vector<MemVWPoint> p0, p1;
+		MemAreaWireVia * areavw0 = get_area(area0);
+		areavw0->get_point(wire.x1(), wire.y1(), p0, layer, MemAreaWireVia::DO_CLONE);
+		if (p0.empty())
+			return ERR_PointP0NotExist;
+		Q_ASSERT(p0.size() == 1);
+
+		MemAreaWireVia * areavw1 = get_area(area1);
+		areavw1->get_point(wire.x2(), wire.y2(), p1, layer, MemAreaWireVia::DO_CLONE);
+		if (p1.empty())
+			return ERR_PointP1NotExist;
+		Q_ASSERT(p1.size() == 1);
+				
+		rc = del_wire_nocheck(p0[0], p1[0], layer, patches);
+		if (rc != Success) {
+			free_patch(patches);
+			return rc;
+		}
+		bool p0_is_new = ((patches.back()->action & DELLINE_DELETE_P0) != 0);
+		bool p1_is_new = ((patches.back()->action & DELLINE_DELETE_P1) != 0);
+		MemVWPoint old_p0(wire.x1(), wire.y1()), old_p1(wire.x2(), wire.y2());
+		MemVWPoint * old_pp0, *old_pp1;
+		if (patches.back()->action & DELLINE_DELETE_P0)
+			old_pp0 = &old_p0;
+		else
+			old_pp0 = dynamic_cast <MemVWPoint *> (patches.back()->new_points[0]);
+		if (patches.back()->action & DELLINE_DELETE_P1)
+			old_pp1 = &old_p1;
+		else
+			old_pp1 = dynamic_cast <MemVWPoint *> (patches.back()->new_points.back());
+
+		if (!online(wire, point)) {				
+			rc = add_wire(QLine(wire.x1(), wire.y1(), point.x(), point.y()), layer, p0_is_new, true, patches);
+			if (rc != Success) {
+				free_patch(patches);
+				return rc;
+			}			
+			rc = add_wire(QLine(wire.x2(), wire.y2(), point.x(), point.y()), layer, p1_is_new, false, patches);
+			if (rc != Success) {
+				free_patch(patches);
+				return rc;
+			}			
+		}
+		else {	
+			MemVWPoint *new_pp;
+			rc = add_wire_nocheck(*old_pp0, MemVWPoint(point.x(), point.y()), layer, patches);
+			if (rc != Success) {
+				free_patch(patches);
+				return rc;
+			}			
+			new_pp = dynamic_cast <MemVWPoint *> (patches.back()->new_points.back());
+			rc = add_wire_nocheck(*old_pp1, *new_pp, layer, patches);
+			if (rc != Success) {
+				free_patch(patches);
+				return rc;
+			}			
+		}		
+		return Success;
+	}
+
+	int delete_wire(const QLine & org_wire, const QLine & del_wire, unsigned char layer, vector<PointPatch *> & patches)
+	{
+		if (del_wire.x1() == del_wire.x2() && del_wire.y1() == del_wire.y2())
+			return ERR_INVALIDPARAM;
+
+		unsigned area0, area1;
+		int rc;
+		area0 = DBID::xy2id_area(org_wire.x1(), org_wire.y1());
+		area1 = DBID::xy2id_area(org_wire.x2(), org_wire.y2());
+
+		vector<MemVWPoint> p0, p1;
+		MemAreaWireVia * areavw0 = get_area(area0);
+		areavw0->get_point(org_wire.x1(), org_wire.y1(), p0, layer, MemAreaWireVia::DO_CLONE);
+		if (p0.empty())
+			return ERR_PointP0NotExist;
+		Q_ASSERT(p0.size() == 1);
+
+		MemAreaWireVia * areavw1 = get_area(area1);
+		areavw1->get_point(org_wire.x2(), org_wire.y2(), p1, layer, MemAreaWireVia::DO_CLONE);
+		if (p1.empty())
+			return ERR_PointP1NotExist;
+		Q_ASSERT(p1.size() == 1);
+
+		rc = del_wire_nocheck(p0[0], p1[0], layer, patches);
+		if (rc != Success) {
+			free_patch(patches);
+			return rc;
+		}
+		bool p0_is_new = ((patches.back()->action & DELLINE_DELETE_P0) != 0);
+		bool p1_is_new = ((patches.back()->action & DELLINE_DELETE_P1) != 0);
+		MemVWPoint old_p0(org_wire.x1(), org_wire.y1()), old_p1(org_wire.x2(), org_wire.y2());
+		MemVWPoint * old_pp0, *old_pp1;
+		if (patches.back()->action & DELLINE_DELETE_P0)
+			old_pp0 = &old_p0;
+		else
+			old_pp0 = dynamic_cast <MemVWPoint *> (patches.back()->new_points[0]);
+		if (patches.back()->action & DELLINE_DELETE_P1)
+			old_pp1 = &old_p1;
+		else
+			old_pp1 = dynamic_cast <MemVWPoint *> (patches.back()->new_points.back());
+
+		if (org_wire.p1() != del_wire.p1()) {
+			if (!online(org_wire, del_wire.p1())) {
+				rc = add_wire(QLine(org_wire.x1(), org_wire.y1(), del_wire.x1(), del_wire.y1()), layer, p0_is_new, true, patches);
+				if (rc != Success) {
+					free_patch(patches);
+					return rc;
+				}
+			}
+			else {
+				MemVWPoint new_p(del_wire.x1(), del_wire.y1());
+				rc = add_wire_nocheck(*old_pp0, new_p, layer, patches);
+				if (rc != Success) {
+					free_patch(patches);
+					return rc;
+				}
+			}
+		}
+		
+		if (org_wire.p2() != del_wire.p2()) {
+			if (!online(org_wire, del_wire.p2())) {
+				rc = add_wire(QLine(org_wire.x2(), org_wire.y2(), del_wire.x2(), del_wire.y2()), layer, p1_is_new, true, patches);
+				if (rc != Success) {
+					free_patch(patches);
+					return rc;
+				}
+			}
+			else {
+				MemVWPoint new_p(del_wire.x2(), del_wire.y2());
+				rc = add_wire_nocheck(*old_pp1, new_p, layer, patches);
+				if (rc != Success) {
+					free_patch(patches);
+					return rc;
+				}
+			}
+		}				
+		return Success;
+	}
     /*int add_via(unsigned x0, unsigned y0, unsigned char l0, unsigned char l1, vector<PointPatch> & patch);
     int add_inst(unsigned x0, unsigned y0, unsigned short template_dir, vector<PointPatch> & patch);
     int add_connect(unsigned x0, unsigned y0, unsigned char l0, DBID id1,

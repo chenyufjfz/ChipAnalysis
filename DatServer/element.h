@@ -1,6 +1,7 @@
 #ifndef ELEMENT_H
 #define ELEMENT_H
 
+#include <QLine>
 #include <vector>
 #include <string.h>
 using namespace std;
@@ -10,6 +11,266 @@ using namespace std;
 #define MAKE_U32(y, x) (((unsigned long) (y) <<16) | (x))
 #define MAKE_U64(y, x) (((unsigned long long) (y) <<32) | (x))
 
+
+enum {
+	//following is for line and line relation
+	PARALLEL,           // //
+	NOINTERSECTION,     // \/
+	CENTERINTERSECTION, // X
+	BOUNDINTERSECTION1, // T heng
+	BOUNDINTERSECTION2, // T heng
+	TEXTEND1,           // T shu
+	TEXTEND2,           // T shu
+	LEXTEND1,           // L
+	LEXTEND2,           // L
+	INCLUDE,            // [()]
+	INCLUDEEDBY,        // ([])
+	EXTEND1,            // ([)]
+	EXTEND2,            // [(])
+	//following is for line and rect relation
+	P0INSIDE,
+	P1INSIDE,
+	BOTHINSIDE,
+	CROSSINTERSECTION
+};
+
+bool get_cross(const QPoint & u1, const QPoint & u2, const QPoint & v1, const QPoint &v2, double &x, double &y){
+	x = u1.x();
+	y = u1.y();
+	double a = (double)(u1.x() - u2.x())*(v1.y() - v2.y()) - (double)(u1.y() - u2.y())*(v1.x() - v2.x());
+	double t = 0;
+	if (a != 0)
+		t = ((double)(u1.x() - v1.x())*(v1.y() - v2.y()) - (double)(u1.y() - v1.y())*(v1.x() - v2.x())) / a;
+	x += (u2.x() - u1.x())*t;
+	y += (u2.y() - u1.y())*t;
+	return (a != 0);
+}
+
+bool online(const QLine &l, const QPoint &p)
+{
+	double a = (double)(l.x1() - p.x())*(l.y2() - p.y()) - (double)(l.y1() - p.y())*(l.x2() - p.x());
+	return (a == 0);
+}
+
+#define SGN(x) (((x)>0) ? 1 : (((x)==0) ? 0 : -1))
+int intersect(const QLine & l1, const QLine & l2, QPoint &p)
+{
+	Q_ASSERT(l1.x1() != l1.x2() || l1.y1() != l1.y2());
+	Q_ASSERT(l2.x1() != l2.x2() || l2.y1() != l2.y2());
+	double x0, y0;
+	bool parallel = (!get_cross(l1.p1(), l1.p2(), l2.p1(), l2.p2(), x0, y0));
+	p.setX((int)x0);
+	p.setY((int)y0);
+	int x11 = SGN(l1.x1() - l2.x1());
+	int x12 = SGN(l1.x1() - l2.x2());
+	int x21 = SGN(l1.x2() - l2.x1());
+	int x22 = SGN(l1.x2() - l2.x2());
+	bool same_x = (x11 == x12 && x21 == x22 && x12 == x21);
+	if (same_x && x11 != 0)
+		return parallel ? PARALLEL : NOINTERSECTION;
+
+	int y11 = SGN(l1.y1() - l2.y1());
+	int y12 = SGN(l1.y1() - l2.y2());
+	int y21 = SGN(l1.y2() - l2.y1());
+	int y22 = SGN(l1.y2() - l2.y2());
+	bool same_y = (y11 == y12 && y21 == y22 && y12 == y21);
+	if (same_y && y11 != 0)
+		return parallel ? PARALLEL : NOINTERSECTION;
+
+	int x01 = SGN(x0 - l2.x1());
+	int x02 = SGN(x0 - l2.x2());
+	int x10 = SGN(l1.x1() - x0);
+	int x20 = SGN(l1.x2() - x0);
+	int y01 = SGN(y0 - l2.y1());
+	int y02 = SGN(y0 - l2.y2());
+	int y10 = SGN(l1.y1() - y0);
+	int y20 = SGN(l1.y2() - y0);
+
+	if (l1.x1() == l1.x2()) { //x11==x21, x12==x22
+		Q_ASSERT(x0 == l1.x1());
+		if (x11 == x12) { //l1.x1()==l1.x2()==l2.x1()==l2.x2()
+			Q_ASSERT(x11 == 0); //4 points in one line
+			if (y11 != y12 && y21 != y22) //l1.y1 & l1.y2 is inside l2
+				return INCLUDE;
+			if (y11 == y12 && y21 != y22) //l1.y1 is outside l2, l1.y2 is inside l2
+				return EXTEND1;
+			if (y11 != y12 && y21 == y22) //l1.y1 is inside l2, l1.y2 is outside l2
+				return EXTEND2;
+
+			Q_ASSERT(y12 != y21);
+			return INCLUDEEDBY;
+		}
+		else {
+			if (x11 == 0) { //l1.x1() ==l2.x1() = l1.x2(), 3 points in one line
+				if (y11 == y21) //l2.y1 is outside l1
+					return NOINTERSECTION;
+				if (y11 == 0)  //l1.y1()==l2.y1()
+					return LEXTEND1;
+				if (y21 == 0)  //l1.y2()==l2.y1()
+					return LEXTEND2;
+				return BOUNDINTERSECTION1;
+			}
+			if (x12 == 0) { //l1.x1()==l2.x2()=l1.x2()
+				if (y12 == y22) //l2.y2 is outside l1
+					return NOINTERSECTION;
+				if (y12 == 0) //l1.y1()==l2.y2()
+					return LEXTEND1;
+				if (y22 == 0) //l1.y2()==l2.y2()
+					return LEXTEND2;
+				return BOUNDINTERSECTION2;
+			}
+			//x11!=x12 && x11!=0 && x12!=0
+			if (y10 == y20)
+				return NOINTERSECTION;
+			if (y10 == 0)
+				return TEXTEND1;
+			if (y20 == 0)
+				return TEXTEND2;
+			return CENTERINTERSECTION;
+		}
+	}
+
+	if (l1.y1() == l1.y2()) { //y11==y21, y12==y22
+		Q_ASSERT(y0 == l1.y1());
+		if (y11 == y12) { //l1.y1()==l1.y2()==l2.y1()==l2.y2()
+			Q_ASSERT(y11 == 0); //4 points in one line
+			if (x11 != x12 && x21 != x22) //l1.x1 & l1.x2 is inside l2
+				return INCLUDE;
+			if (x11 == x12 && x21 != x22) //l1.x1 is outside l2, l1.x2 is inside l2
+				return EXTEND1;
+			if (x11 != x12 && x21 == x22) //l1.x1 is inside l2, l1.x2 is outside l2
+				return EXTEND2;
+			//l1.x1 & l1.x2 is outside l2
+			Q_ASSERT(x12 != x21);
+			return INCLUDEEDBY;
+		}
+		else {
+			if (y11 == 0) { //l1.y1() ==l2.y1() = l1.y2(), 3 points in one line
+				if (x11 == x21) //l2.x1 is outside l1
+					return NOINTERSECTION;
+				if (x11 == 0) //l1.x1()==l2.x1()
+					return LEXTEND1;
+				if (x21 == 0) //l1.x2()==l2.x1()
+					return LEXTEND2;
+				return BOUNDINTERSECTION1;
+			}
+			if (y12 == 0) { //l1.y1() ==l2.y2() = l1.y2(), 3 points in one line
+				if (x12 == x22) //l2.x2 is outside l1
+					return NOINTERSECTION;
+				if (x12 == 0) //l1.x1()==l2.x2()
+					return LEXTEND1;
+				if (x22 == 0) //l1.x2()==l2.x2()
+					return LEXTEND2;
+				return BOUNDINTERSECTION2;
+			}
+			//y11!=y12 && y11!=0 && y12!=0
+			if (x10 == x20) //cross point is outside l1
+				return NOINTERSECTION;
+			if (x10 == 0)
+				return TEXTEND1;
+			if (x20 == 0)
+				return TEXTEND2;
+			return CENTERINTERSECTION;
+		}
+	}
+	/*判断交点是否在线段内还是在线段外
+	水平线,   必有 y01==y02==0
+	若点在线段外, x01==x02
+	若点在线段内, x01!=x02
+	垂直线,   必有 x01==x02==0
+	若点在线段外, y01==y02
+	若点在线段内, y01!=y02
+	斜线,       若点在线段外, x01==x02 && y01==y02
+	若点在线段内, x01!=x02 && y01!=y02
+
+	交点在线段外 <==> x01==x02 && y01==y02
+	交点在线段内 <==> x01!=x02 || y01!=y02
+	*/
+
+	if (!parallel && (x10 == x20 && y10 == y20)) //cross point is outside l1
+		return NOINTERSECTION;
+
+	if (online(l1, l2.p1())) {
+		if (parallel) {//4 points in one line
+			if (x11 != x12 && x21 != x22) //l1.x1 & l1.x2 is inside l2
+				return INCLUDE;
+			if (x11 == x12 && x21 != x22) //l1.x1 is outside l2, l1.x2 is inside l2
+				return EXTEND1;
+			if (x11 != x12 && x21 == x22) //l1.x1 is inside l2, l1.x2 is outside l2
+				return EXTEND2;
+			//l1.x1 & l1.x2 is outside l2
+			Q_ASSERT(x12 != x21);
+			return INCLUDEEDBY;
+		}
+		else {//3 points in one line
+			/*
+			if (x11==x21) //l2.x1 is outside l1
+			return NOINTERSECTION;*/
+			Q_ASSERT(x11 != x21); //because x11==x10, x21==x20
+			if (x11 == 0) //l1.x1()==l2.x1()
+				return LEXTEND1;
+			if (x21 == 0) //l1.x2()==l2.x1()
+				return LEXTEND2;
+			return BOUNDINTERSECTION1;
+		}
+	}
+
+	if (online(l1, l2.p2())) { //3 points in one line
+		Q_ASSERT(!parallel);
+		/*if (x12==x22) //l2.x2 is outside l1
+		return NOINTERSECTION;*/
+		Q_ASSERT(x12 != x22); //because x12==x10, x22==x20
+		if (x12 == 0) //l1.x1()==l2.x2()
+			return LEXTEND1;
+		if (x22 == 0) //l1.x2()==l2.x2()
+			return LEXTEND2;
+		return BOUNDINTERSECTION2;
+	}
+
+	if (parallel)
+		return PARALLEL;
+	//cross point is inside l1, and l1 is not 0 90 line
+	// !parallel && x10!=x20 && y10!=y20
+	if (x01 == x02 && y01 == y02)
+		return NOINTERSECTION;
+	if (online(l2, l1.p1()))
+		return TEXTEND1;
+	if (online(l2, l1.p2()))
+		return TEXTEND2;
+	return CENTERINTERSECTION;
+}
+
+bool cross_rect(const QRect & rect, const QLine & line)
+{
+	int rc;
+	QPoint p;
+	QLine up(rect.topLeft(), rect.bottomRight());
+	rc = intersect(up, line, p);
+	if (rc != PARALLEL && rc != NOINTERSECTION)
+		return true;
+	QLine right(rect.topRight(), rect.bottomLeft());
+	rc = intersect(right, line, p);
+	if (rc != PARALLEL && rc != NOINTERSECTION)
+		return true;
+	return false;
+}
+
+int intersect(const QRect & rect, const QLine & line)
+{
+	bool in0, in1;
+	in0 = rect.contains(line.p1());
+	in1 = rect.contains(line.p2());
+	if (in0 & in1)
+		return BOTHINSIDE;
+	if (in0)
+		return P0INSIDE;
+	if (in1)
+		return P1INSIDE;
+	if (cross_rect(rect, line))
+		return CROSSINTERSECTION;
+	else
+		return NOINTERSECTION;
+}
 
 #pragma pack(push)
 #pragma pack(1)
@@ -139,7 +400,7 @@ struct DBID {
 
 class MemPoint {
 public:
-    unsigned y, x;			//same as DBPoint
+    unsigned y, x;			//extend from DBPoint (x,y), DBPoint x,y is the offset, use localx2grid to change
     unsigned char * attach; //may point to memory or database
 protected:
     unsigned pack_info;		//same as DBPoint
@@ -279,12 +540,6 @@ typedef union {
  * size(1) layer_connetnum(1) dy(2) dx(2) PortID (1 or 2) | dy(2) dx(2) PortID (1 or 2)...
  * size(1) name_string
  *
- * PATCH_CHANGE_NAME name_len(1) name_string
- * PATCH_DELETE_REF ref_index(1)
- * PATCH_INSERT_REF ref_index(1) layer_connectnum(1) dir_scale(1) len(1 to 4) | dir_scale(1), local_id(1)...
- *              or  ref_index(1) layer_connectnum(1) dir_scale(1) dy(2 or 4) dx(2 or 4|, dir_scale(1), local_id(1)...
- *              or  ref_index(1) layer_connectnum(1) dy(2) dx(2) PortID (1 or 2) | dy(2) dx(2) PortID (1 or 2)...
- * PATCH_CHANGE_REF ref_index(1) layer_connectnum(1) dir_scale(1) local_id(1) len(2 or 3)
  */
 class MemVWPoint : public MemPoint {
 public:
@@ -345,6 +600,16 @@ public:
     }
 
 	//use this to create MemVWPoint in one layer
+	MemVWPoint(unsigned x_, unsigned y_)
+	{
+		y = y_;
+		x = x_;
+		pack_info = 0;
+		part_id = 0;
+		flag_in_mem = 0;
+		attach = NULL;
+	}
+	
 	MemVWPoint(unsigned x_, unsigned y_, unsigned char layer)
 	{
 		y = y_;
@@ -661,6 +926,32 @@ public:
             Q_ASSERT(ref <= limit);
         }
     }
+
+	int intersect(const QLine & wire, unsigned char layer, bool exclude_p0, bool exclude_p1)
+	{
+		int rc;
+		if (layer<get_layer_min() || layer>get_layer_max())
+			return false;
+		vector <PairPoint> rp;
+		get_layer_wire(layer, rp);
+
+		if (exclude_p0 && x == wire.x1() && y == wire.y1())
+			return NOINTERSECTION;
+		if (exclude_p1 && x == wire.x2() && y == wire.y2())
+			return NOINTERSECTION;
+		QPoint org(x, y);
+		QPoint pp;
+		for (int i = 0; i < rp.size(); i++) {
+			if (exclude_p0 && rp[i].wp.x == wire.x1() && rp[i].wp.y == wire.y1())
+				continue;
+			if (exclude_p1 && rp[i].wp.x == wire.x2() && rp[i].wp.y == wire.y2())
+				continue;
+			rc = ::intersect(QLine(org, QPoint(rp[i].wp.x, rp[i].wp.y)), wire, pp);
+			if (rc != NOINTERSECTION && rc != PARALLEL)
+				return rc;
+		}
+		return NOINTERSECTION;
+	}
 
     //if success return 0, else return -1
     int delete_layer_wire(unsigned char layer, unsigned x, unsigned y, unsigned short port=0)
@@ -986,12 +1277,24 @@ public:
     }
 };
 
+#define ADDLINE_MODIFY_P0 1
+#define ADDLINE_CREATE_P0 2
+#define ADDLINE_MODIFY_P1 4
+#define ADDLINE_CREATE_P1 8
+#define DELLINE_MODIFY_P0 0x10
+#define DELLINE_DELETE_P0 0x20
+#define DELLINE_MODIFY_P1 0x40
+#define DELLINE_DELETE_P1 0x80
 
 class PointPatch {
 public:
 	vector<MemPoint *> old_points;
 	vector<MemPoint *> new_points;
+	int action;
 public:
+	PointPatch() {
+		action = 0;
+	}
 	~PointPatch() {
 		for (int i = 0; i < old_points.size(); i++)
 			delete old_points[i];

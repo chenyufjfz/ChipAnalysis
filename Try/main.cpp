@@ -23,6 +23,7 @@ int test_element_db1();
 int test_element_db2();
 int test_cross();
 int test_element_draw0();
+int test_element_draw1();
 void test_iclayer()
 {
     QString str = "../../M6.dat";
@@ -54,19 +55,19 @@ void test_iclayer()
 
 int main()
 {
-	//_CrtSetBreakAlloc(182);
+	//_CrtSetBreakAlloc(174);
     //test_lmdb();
     //test_raknet();
     //test_iclayer();
-	
+	/*
 	test_element1();
 	test_element0();	
 	test_element_db0();
 	test_element_db1();
 	test_element_db2();
-	test_cross();
+	test_cross();*/
 	
-	test_element_draw0();
+	test_element_draw1();
 	_CrtDumpMemoryLeaks();
 	getchar();
 }
