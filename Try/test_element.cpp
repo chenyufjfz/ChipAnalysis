@@ -807,8 +807,8 @@ int test_element_db2()
 		E(mdb_txn_begin(env, NULL, 0, &txn));
 		wp_set.renew(txn, dbi, area);
 		for (unsigned op_num = 0; op_num < 10; op_num++) {
-			unsigned op = rand() % 256;
-			if (op < 128) { //delete existing ext wire
+			unsigned op = rand() % 512;
+			if (op < 256) { //delete existing ext wire
 				unsigned del = op;
 				if (clone.size() <= del || clone[del] == NULL)
 					continue;
@@ -1308,7 +1308,7 @@ int test_element_draw1()
 
 	DBProject *prj = new DBProject(env, NULL);
 
-	for (int test_num = 200000; test_num >= 0; test_num--) {
+	for (int test_num = 100000; test_num >= 0; test_num--) {
 		int x, y;
 		E(prj->new_write_txn());
 		rand_xy(x, y, max_x, max_y);

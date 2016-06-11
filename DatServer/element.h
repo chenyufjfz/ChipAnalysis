@@ -374,7 +374,7 @@ struct DBID {
 #define AREA_WIREVIA_INFO		0
 #define EXT_WIRE_NUM			2
 #define EXT_WIRE_START			1
-#define EXT_WIRE_END			(EXT_WIRE_START+EXT_WIRE_NUM-1)
+#define EXT_WIRE_END			(EXT_WIRE_START+4*EXT_WIRE_NUM-1)
 
 //for flag_in_mem
 #define IS_INMEM_MASK			0x80
@@ -397,6 +397,9 @@ struct DBID {
 #define LAYER_MIN_SHIFT			22
 #define LAYER_MAX_MASK			0x003e0000
 #define LAYER_MAX_SHIFT			17
+
+#define SCALE_MASK				0x00018000
+#define SCALE_SHIFT				15
 
 class MemPoint {
 public:
@@ -1277,15 +1280,15 @@ public:
     }
 };
 
-#define ADDLINE_MODIFY_P0 1
-#define ADDLINE_CREATE_P0 2
-#define ADDLINE_MODIFY_P1 4
-#define ADDLINE_CREATE_P1 8
-#define DELLINE_MODIFY_P0 0x10
-#define DELLINE_DELETE_P0 0x20
-#define DELLINE_MODIFY_P1 0x40
-#define DELLINE_DELETE_P1 0x80
-
+#define ADDLINE_MODIFY_P0	1
+#define ADDLINE_CREATE_P0	2
+#define ADDLINE_MODIFY_P1	4
+#define ADDLINE_CREATE_P1	8
+#define DELLINE_MODIFY_P0	0x10
+#define DELLINE_DELETE_P0	0x20
+#define DELLINE_MODIFY_P1	0x40
+#define DELLINE_DELETE_P1	0x80
+#define MERGE_PATCH			0x100
 class PointPatch {
 public:
 	vector<MemPoint *> old_points;
@@ -1301,6 +1304,40 @@ public:
 		for (int i = 0; i < new_points.size(); i++)
 			delete new_points[i];
 	}	
+	PointPatch(vector<PointPatch*> & patches) {
+		int i, j, k;
+		for (i = 0; i < patches.size(); i++) {
+			for (j = 0; j < patches[i]->old_points.size(); j++) {
+				bool found = false;
+				for (k = 0; k < new_points.size(); k++) 
+					if (patches[i]->old_points[j]->x == new_points[k]->x &&
+						patches[i]->old_points[j]->y == new_points[k]->y &&
+						patches[i]->old_points[j]->get_pack_info() == new_points[k]->get_pack_info() &&
+						typeid(*(patches[i]->old_points[j])) == typeid(*(new_points[k]))) {
+							found = true;
+							break;
+						}
+				if (found)
+					new_points.erase(new_points.begin() + k);
+				else
+					old_points.push_back(patches[i]->old_points[j]);
+			}
+			for (j = 0; j < patches[i]->new_points.size(); j++) 
+				new_points.push_back(patches[i]->new_points[j]);			
+		}
+			
+		for (int i = 0; i < old_points.size(); i++) {
+			MemVWPoint * vwpoint = dynamic_cast <MemVWPoint *> (old_points[i]);
+			if (vwpoint != NULL) 
+				old_points[i] = new MemVWPoint(*vwpoint);
+		}
+		for (int i = 0; i < new_points.size(); i++) {
+			MemVWPoint * vwpoint = dynamic_cast <MemVWPoint *> (new_points[i]);
+			if (vwpoint != NULL)
+				new_points[i] = new MemVWPoint(*vwpoint);
+		}
+		action = MERGE_PATCH;
+	}
 };
 #endif // ELEMENT_H
 

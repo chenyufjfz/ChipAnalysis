@@ -67,6 +67,7 @@ int main()
 	test_element_db2();
 	test_cross();*/
 	
+	//test_element_db2();
 	test_element_draw1();
 	_CrtDumpMemoryLeaks();
 	getchar();

@@ -45,7 +45,7 @@ typedef unsigned short DB_NUM_TYPE;
 
 typedef struct {						
 	DB_NUM_TYPE part_point_num[16][4];
-	DB_NUM_TYPE ext_wire_num[EXT_WIRE_NUM];
+	DB_NUM_TYPE ext_wire_num[4][EXT_WIRE_NUM];
 } DBAreaWireVia;
 
 #pragma pack(pop)
@@ -83,9 +83,9 @@ class MemAreaWireVia {
 protected:
 	DBAreaWireVia db_info;						//saved in database
 	unsigned short part_size[16][4];			//saved as data.size
-	unsigned short ext_wire_size[EXT_WIRE_NUM];
+	unsigned short ext_wire_size[4][EXT_WIRE_NUM];
 	DBPoint * part_points[16][4];					//maybe point to memory or database	
-	DBExtWire * ext_wires[EXT_WIRE_NUM];
+	DBExtWire * ext_wires[4][EXT_WIRE_NUM];		//maybe point to memory or database	
 	unsigned long long point_set_change;
 	unsigned ext_wire_change;
 	MDB_txn *txn;
@@ -185,13 +185,15 @@ protected:
 
 	void alloc_ext_mem(unsigned char ext_wires_id, unsigned size)
 	{
-		unsigned old_size = ext_wire_size[ext_wires_id];
+		unsigned heap = ext_wires_id & 3;
+		unsigned sub_id = ext_wires_id >> 2;
+		unsigned old_size = ext_wire_size[heap][sub_id];
 		unsigned char * new_part;
 		unsigned short cap;
 
-		Q_ASSERT(size <= 64000 && ext_wires_id < EXT_WIRE_NUM);
-		ext_wire_size[ext_wires_id] = size;
-		if (((ext_wire_change >> ext_wires_id) & 1) == 0 || ext_wires[ext_wires_id] == NULL)  { //in database or empty
+		Q_ASSERT(size <= 64000 && sub_id < EXT_WIRE_NUM);
+		ext_wire_size[heap][sub_id] = size;
+		if (((ext_wire_change >> ext_wires_id) & 1) == 0 || ext_wires[heap][sub_id] == NULL)  { //in database or empty
 			ext_wire_change |= 1 << ext_wires_id;
 			cap = 63;
 			while (cap < size + 2 || cap < old_size + 2)
@@ -200,11 +202,11 @@ protected:
 			Q_ASSERT(new_part != NULL);
 			*((unsigned short*)new_part) = cap;
 			new_part += 2;
-			if (ext_wires[ext_wires_id] != NULL)
-				memcpy(new_part, ext_wires[ext_wires_id], old_size);
-			ext_wires[ext_wires_id] = (DBExtWire*)new_part;
+			if (ext_wires[heap][sub_id] != NULL)
+				memcpy(new_part, ext_wires[heap][sub_id], old_size);
+			ext_wires[heap][sub_id] = (DBExtWire*)new_part;
 		}
-		cap = *((unsigned short*)(ext_wires[ext_wires_id]) - 1);
+		cap = *((unsigned short*)(ext_wires[heap][sub_id]) - 1);
 		if (cap < size + 2) {
 			Q_ASSERT(old_size < size);
 			while (cap < size + 2)
@@ -213,9 +215,9 @@ protected:
 			Q_ASSERT(new_part != NULL);
 			*((unsigned short*)new_part) = cap;
 			new_part += 2;
-			memcpy(new_part, ext_wires[ext_wires_id], old_size);
-			free((unsigned short*)(ext_wires[ext_wires_id]) - 1);
-			ext_wires[ext_wires_id] = (DBExtWire*)new_part;
+			memcpy(new_part, ext_wires[heap][sub_id], old_size);
+			free((unsigned short*)(ext_wires[heap][sub_id]) - 1);
+			ext_wires[heap][sub_id] = (DBExtWire*)new_part;
 		}
 	}
 
@@ -253,21 +255,22 @@ protected:
 					ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
 			}
 			change = change >> 1;
-		}
-		for (int i = 0; i < EXT_WIRE_NUM; i++) {
-			if (ext_change & 1) {
-				DBID id(area, META_TYPE, EXT_WIRE_START + i);
-				key.mv_size = sizeof(id);
-				key.mv_data = &id;
-				data.mv_size = ext_wire_size[i];
-				data.mv_data = ext_wires[i];			
-				if (ext_wire_size[i] == 0)
-					mdb_del(txn, dbi, &key, &data);
-				else
-					ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
+		}		
+		for (int i = 0; i < EXT_WIRE_NUM; i++)
+			for (int heap = 0; heap < 4; heap++) {
+				if (ext_change & 1) {
+					DBID id(area, META_TYPE, EXT_WIRE_START + i * 4 + heap);
+					key.mv_size = sizeof(id);
+					key.mv_data = &id;
+					data.mv_size = ext_wire_size[heap][i];
+					data.mv_data = ext_wires[heap][i];
+					if (ext_wire_size[i] == 0)
+						mdb_del(txn, dbi, &key, &data);
+					else
+						ERR_CHECK1(mdb_put(txn, dbi, &key, &data, 0), -1);
+				}
+				ext_change = ext_change >> 1;
 			}
-			ext_change = ext_change >> 1;
-		}
 		return 0;
 	}
 
@@ -309,19 +312,21 @@ protected:
 
 	unsigned char get_ext_wire_id(unsigned x, unsigned y)
 	{
-		unsigned char search_id = HASH_SPLIT(x, y) ? 1 : 0;
-		if (db_info.ext_wire_num[0] == 0 && db_info.ext_wire_num[1] == 0)
-			search_id = EXT_WIRE_NUM;
+		unsigned char heap = (HASH_SPLIT(x, y) << 1) | HASH_SPLIT(y, x);
+		unsigned char sub_id = HASH_SPLIT(2*x, y) ? 1 : 0;
+		unsigned char ext_wire_id = sub_id *4 +heap;
+		if (db_info.ext_wire_num[heap][0] == 0 && db_info.ext_wire_num[heap][1] == 0)
+			ext_wire_id = EXT_WIRE_NUM * 4 + heap;
 		else
-			if (db_info.ext_wire_num[0] == 0) {
-			if (search_id == 0)
-				search_id = EXT_WIRE_NUM;
+			if (db_info.ext_wire_num[heap][0] == 0) {
+				if (sub_id == 0)
+					ext_wire_id = EXT_WIRE_NUM * 4 + heap;
 			}
 			else {
-				if (db_info.ext_wire_num[1] == 0)
-					search_id = 0;
+				if (db_info.ext_wire_num[heap][1] == 0)
+					ext_wire_id = heap;
 			}
-			return search_id;
+			return ext_wire_id;
 	}
 
 public:
@@ -398,11 +403,12 @@ public:
 		}
 		point_set_change = 0;
 		
-		for (int i = 0; i < EXT_WIRE_NUM; i++) {
-			if (ext_wire_change & 1)
-				free((unsigned short*)(ext_wires[i]) - 1);
-			ext_wire_change = ext_wire_change >> 1;
-		}
+		for (int i = 0; i < EXT_WIRE_NUM; i++) 
+			for (int heap = 0; heap < 4; heap++) {
+				if (ext_wire_change & 1)
+					free((unsigned short*)(ext_wires[heap][i]) - 1);
+				ext_wire_change = ext_wire_change >> 1;
+			}
 		ext_wire_change = 0;
 		return 0;
 	}
@@ -719,32 +725,35 @@ public:
 	int get_ext_wire_all(vector<DBExtWire> & ext_wire_set)
 	{
 		ext_wire_set.clear();
-		for (int i = 0; i < EXT_WIRE_NUM; i++) {
-			if (db_info.ext_wire_num[i] != 0 && ext_wires[i] == NULL) {
-				DBID id(area, META_TYPE, EXT_WIRE_START + i);
-				MDB_val key, data;
-				int rc;
-				key.mv_size = sizeof(id);
-				key.mv_data = &id;
-				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
-				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[i] * sizeof(DBExtWire));
-				ext_wires[i] = (DBExtWire *)data.mv_data;
-				ext_wire_size[i] = (unsigned short)data.mv_size;
+		for (int i = 0; i < EXT_WIRE_NUM; i++)
+			for (int heap = 0; heap < 4; heap++) {
+				if (db_info.ext_wire_num[heap][i] != 0 && ext_wires[heap][i] == NULL) {
+					DBID id(area, META_TYPE, EXT_WIRE_START + i * 4 + heap);
+					MDB_val key, data;
+					int rc;
+					key.mv_size = sizeof(id);
+					key.mv_data = &id;
+					ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
+					Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[heap][i] * sizeof(DBExtWire));
+					ext_wires[heap][i] = (DBExtWire *)data.mv_data;
+					ext_wire_size[heap][i] = (unsigned short)data.mv_size;
+				}
+				ext_wire_set.insert(ext_wire_set.end(), ext_wires[heap][i], ext_wires[heap][i] + db_info.ext_wire_num[heap][i]);
 			}
-			ext_wire_set.insert(ext_wire_set.end(), ext_wires[i], ext_wires[i] + db_info.ext_wire_num[i]);
-		}
 		return 0;
 	}
 
 	int del_ext_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned char layer)
 	{
-		unsigned char search_id = get_ext_wire_id(x0, y0);
-		if (search_id >= EXT_WIRE_NUM)
+		unsigned char ext_wire_id = get_ext_wire_id(x0, y0);		
+		if (ext_wire_id >= EXT_WIRE_NUM*4)
 			return -1;
-		if (db_info.ext_wire_num[search_id] == 0)
+		unsigned char heap = ext_wire_id & 3;
+		unsigned char sub_id = ext_wire_id >> 2;
+		if (db_info.ext_wire_num[heap][sub_id] == 0)
 			return -1;
-		DBID id(area, META_TYPE, EXT_WIRE_START + search_id);
-		DBExtWire * search_set = ext_wires[search_id];
+		DBID id(area, META_TYPE, EXT_WIRE_START + ext_wire_id);
+		DBExtWire * search_set = ext_wires[heap][sub_id];
 		if (search_set == NULL) {
 			MDB_val key, data;
 			int rc;
@@ -752,15 +761,15 @@ public:
 			key.mv_data = &id;
 			ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 			search_set = (DBExtWire *)data.mv_data;
-			ext_wires[search_id] = search_set;
-			Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
-			ext_wire_size[search_id] = (unsigned short)data.mv_size;
+			ext_wires[heap][sub_id] = search_set;
+			Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[heap][sub_id] * sizeof(DBExtWire));
+			ext_wire_size[heap][sub_id] = (unsigned short)data.mv_size;
 		}
 
 		unsigned long long yx0 = MAKE_U64(y0, x0);
 		unsigned long long yx1 = MAKE_U64(y1, x1);
 		unsigned i;
-		for (i = 0; i < db_info.ext_wire_num[search_id]; i++) {
+		for (i = 0; i < db_info.ext_wire_num[heap][sub_id]; i++) {
 			unsigned long long search_yx0 = MAKE_U64(search_set[i].y0, search_set[i].x0);
 
 			if (search_yx0 == yx0) {
@@ -770,17 +779,17 @@ public:
 						break;
 				}
 				if (search_yx1 > yx1)
-					i = db_info.ext_wire_num[search_id];
+					i = db_info.ext_wire_num[heap][sub_id];
 			}
 			if (search_yx0 > yx0)
-				i = db_info.ext_wire_num[search_id];
+				i = db_info.ext_wire_num[heap][sub_id];
 		}
 
-		if (i < db_info.ext_wire_num[search_id]) {
-			db_info.ext_wire_num[search_id]--;
-			alloc_ext_mem(search_id, db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
-			memmove(&ext_wires[search_id][i], &ext_wires[search_id][i + 1],
-				(db_info.ext_wire_num[search_id] - i) * sizeof(DBExtWire));
+		if (i < db_info.ext_wire_num[heap][sub_id]) {
+			db_info.ext_wire_num[heap][sub_id]--;
+			alloc_ext_mem(ext_wire_id, db_info.ext_wire_num[heap][sub_id] * sizeof(DBExtWire));
+			memmove(&ext_wires[heap][sub_id][i], &ext_wires[heap][sub_id][i + 1],
+				(db_info.ext_wire_num[heap][sub_id] - i) * sizeof(DBExtWire));
 			return 0;
 		}
 		else
@@ -792,26 +801,26 @@ public:
 		return del_ext_wire(ext_wire.x0, ext_wire.y0, ext_wire.x1, ext_wire.y1, GET_FIELD(ext_wire.pack_info, EXTWIRE_LAYER));
 	}
 	
-	void split_ext_wire()
+	void split_ext_wire(unsigned char heap)
 	{
-		DBExtWire * ext_wire2 = (DBExtWire *)malloc(db_info.ext_wire_num[0] * sizeof(DBExtWire));
+		DBExtWire * ext_wire2 = (DBExtWire *)malloc(db_info.ext_wire_num[heap][0] * sizeof(DBExtWire));
 		unsigned ext_num2 = 0;
 		bool del = true;
 		while (del) {
 			del = false;
-			for (int i = 0; i < db_info.ext_wire_num[0]; i++) {
-				if (HASH_SPLIT(ext_wires[0][i].x0, ext_wires[0][i].y0)) {
-					ext_wire2[ext_num2++] = ext_wires[0][i];
-					del_ext_wire(ext_wires[0][i]);
+			for (int i = 0; i < db_info.ext_wire_num[heap][0]; i++) {
+				if (HASH_SPLIT(ext_wires[heap][0][i].x0*2, ext_wires[heap][0][i].y0)) {
+					ext_wire2[ext_num2++] = ext_wires[heap][0][i];
+					del_ext_wire(ext_wires[heap][0][i]);
 					del = true;
 					break;
 				}
 			}
 		}
-		db_info.ext_wire_num[1] = ext_num2;
+		db_info.ext_wire_num[heap][1] = ext_num2;
 		if (ext_num2 != 0) {
-			alloc_ext_mem(1, ext_num2*sizeof(DBExtWire));
-			memcpy(ext_wires[1], ext_wire2, ext_num2 * sizeof(DBExtWire));
+			alloc_ext_mem(4 + heap, ext_num2*sizeof(DBExtWire));
+			memcpy(ext_wires[heap][1], ext_wire2, ext_num2 * sizeof(DBExtWire));
 		}
 		free(ext_wire2);
 	}
@@ -821,12 +830,14 @@ public:
 	int add_ext_wire(unsigned x0, unsigned y0, unsigned x1, unsigned y1, unsigned char layer)
 	{
 		Q_ASSERT(DBID::xy2id_area(x0, y0) != area && DBID::xy2id_area(x1, y1) != area);
-		unsigned char search_id = get_ext_wire_id(x0, y0);
-		if (search_id >= EXT_WIRE_NUM)
-			search_id -= EXT_WIRE_NUM;
-		DBID id(area, META_TYPE, EXT_WIRE_START + search_id);	
-		if (db_info.ext_wire_num[search_id] != 0) {
-			DBExtWire * search_set = ext_wires[search_id];
+		unsigned char ext_wire_id = get_ext_wire_id(x0, y0);
+		if (ext_wire_id >= 4 * EXT_WIRE_NUM)
+			ext_wire_id -= 4 * EXT_WIRE_NUM;
+		unsigned char heap = ext_wire_id & 3;
+		unsigned char sub_id = ext_wire_id >> 2;
+		DBID id(area, META_TYPE, EXT_WIRE_START + ext_wire_id);
+		if (db_info.ext_wire_num[heap][sub_id] != 0) {
+			DBExtWire * search_set = ext_wires[heap][sub_id];
 			if (search_set == NULL) {
 				MDB_val key, data;
 				int rc;
@@ -834,19 +845,19 @@ public:
 				key.mv_data = &id;
 				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
 				search_set = (DBExtWire *)data.mv_data;
-				ext_wires[search_id] = search_set;
-				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
-				ext_wire_size[search_id] = (unsigned short)data.mv_size;
+				ext_wires[heap][sub_id] = search_set;
+				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[heap][sub_id] * sizeof(DBExtWire));
+				ext_wire_size[heap][sub_id] = (unsigned short)data.mv_size;
 			}
 		}
 		else
-			Q_ASSERT(ext_wire_size[search_id] == 0);
+			Q_ASSERT(ext_wire_size[heap][sub_id] == 0);
 				
-		DBExtWire * search_set = ext_wires[search_id];
+		DBExtWire * search_set = ext_wires[heap][sub_id];
 		unsigned long long yx0 = MAKE_U64(y0, x0);
 		unsigned long long yx1 = MAKE_U64(y1, x1);
 		unsigned i;
-		for (i = 0; i < db_info.ext_wire_num[search_id]; i++) {
+		for (i = 0; i < db_info.ext_wire_num[heap][sub_id]; i++) {
 			unsigned long long search_yx0 = MAKE_U64(search_set[i].y0, search_set[i].x0);
 
 			if (search_yx0 == yx0) {
@@ -866,18 +877,18 @@ public:
 				break;
 		}
 
-		db_info.ext_wire_num[search_id]++;
-		alloc_ext_mem(search_id, db_info.ext_wire_num[search_id] * sizeof(DBExtWire));
-		memmove(&ext_wires[search_id][i + 1], &ext_wires[search_id][i], (db_info.ext_wire_num[search_id] - i-1) * sizeof(DBExtWire));
-		ext_wires[search_id][i].x0 = x0;
-		ext_wires[search_id][i].y0 = y0;
-		ext_wires[search_id][i].x1 = x1;
-		ext_wires[search_id][i].y1 = y1;
-		ext_wires[search_id][i].pack_info = 0;
-		SET_FIELD(ext_wires[search_id][i].pack_info, EXTWIRE_LAYER, layer);
+		db_info.ext_wire_num[heap][sub_id]++;
+		alloc_ext_mem(ext_wire_id, db_info.ext_wire_num[heap][sub_id] * sizeof(DBExtWire));
+		memmove(&ext_wires[heap][sub_id][i + 1], &ext_wires[heap][sub_id][i], (db_info.ext_wire_num[heap][sub_id] - i - 1) * sizeof(DBExtWire));
+		ext_wires[heap][sub_id][i].x0 = x0;
+		ext_wires[heap][sub_id][i].y0 = y0;
+		ext_wires[heap][sub_id][i].x1 = x1;
+		ext_wires[heap][sub_id][i].y1 = y1;
+		ext_wires[heap][sub_id][i].pack_info = 0;
+		SET_FIELD(ext_wires[heap][sub_id][i].pack_info, EXTWIRE_LAYER, layer);
 
-		if (search_id == 0 && db_info.ext_wire_num[1] == 0 && db_info.ext_wire_num[0] > SPLIT_TH)
-			split_ext_wire();
+		if (sub_id == 0 && db_info.ext_wire_num[heap][1] == 0 && db_info.ext_wire_num[heap][0] > SPLIT_TH)
+			split_ext_wire(heap);
 		return 0;
 	}
 
@@ -900,27 +911,29 @@ public:
 			if ((rc = points[i].intersect(wire, layer, exclude_p0, exclude_p1)) != NOINTERSECTION)
 				return rc;
 		}
-		for (int i = 0; i < EXT_WIRE_NUM; i++) {
-			if (db_info.ext_wire_num[i] != 0 && ext_wires[i] == NULL) {
+		for (int i = 0; i < EXT_WIRE_NUM; i++) 
+			for (int heap=0; heap<4; heap++) {
+			if (db_info.ext_wire_num[heap][i] != 0 && ext_wires[heap][i] == NULL) {
 				DBID id(area, META_TYPE, EXT_WIRE_START + i);
 				MDB_val key, data;
 				key.mv_size = sizeof(id);
 				key.mv_data = &id;
 				ERR_CHECK1(mdb_get(txn, dbi, &key, &data), -1);
-				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[i] * sizeof(DBExtWire));
-				ext_wires[i] = (DBExtWire *)data.mv_data;
-				ext_wire_size[i] = (unsigned short)data.mv_size;
+				Q_ASSERT(data.mv_size <= 64000 && data.mv_size == db_info.ext_wire_num[heap][i] * sizeof(DBExtWire));
+				ext_wires[heap][i] = (DBExtWire *)data.mv_data;
+				ext_wire_size[heap][i] = (unsigned short)data.mv_size;
 			}
-			for (int j = 0; j < db_info.ext_wire_num[i]; j++) 
-				if (layer == GET_FIELD(ext_wires[i][j].pack_info, EXTWIRE_LAYER)) {
-					if (exclude_p0 && (ext_wires[i][j].x0 == wire.x1() && ext_wires[i][j].y0 == wire.y1() ||
-						ext_wires[i][j].x1 == wire.x1() && ext_wires[i][j].y1 == wire.y1()))
+			for (int j = 0; j < db_info.ext_wire_num[heap][i]; j++) 
+				if (layer == GET_FIELD(ext_wires[heap][i][j].pack_info, EXTWIRE_LAYER)) {
+					if (exclude_p0 && (ext_wires[heap][i][j].x0 == wire.x1() && ext_wires[heap][i][j].y0 == wire.y1() ||
+						ext_wires[heap][i][j].x1 == wire.x1() && ext_wires[heap][i][j].y1 == wire.y1()))
 						continue;
-					if (exclude_p1 && (ext_wires[i][j].x0 == wire.x2() && ext_wires[i][j].y0 == wire.y2() ||
-						ext_wires[i][j].x1 == wire.x2() && ext_wires[i][j].y1 == wire.y2()))
+					if (exclude_p1 && (ext_wires[heap][i][j].x0 == wire.x2() && ext_wires[heap][i][j].y0 == wire.y2() ||
+						ext_wires[heap][i][j].x1 == wire.x2() && ext_wires[heap][i][j].y1 == wire.y2()))
 						continue;
 					QPoint pp;
-					rc = ::intersect(QLine(ext_wires[i][j].x0, ext_wires[i][j].y0, ext_wires[i][j].x1, ext_wires[i][j].y1), wire, pp);
+					rc = ::intersect(QLine(ext_wires[heap][i][j].x0, ext_wires[heap][i][j].y0, 
+						ext_wires[heap][i][j].x1, ext_wires[heap][i][j].y1), wire, pp);
 					if (rc != NOINTERSECTION && rc != PARALLEL)
 						return rc;
 				}
