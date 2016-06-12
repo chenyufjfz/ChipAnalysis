@@ -59,16 +59,15 @@ int main()
     //test_lmdb();
     //test_raknet();
     //test_iclayer();
-	/*
+	
 	test_element1();
 	test_element0();	
 	test_element_db0();
 	test_element_db1();
 	test_element_db2();
-	test_cross();*/
+	test_cross();
 	
-	//test_element_db2();
-	test_element_draw1();
+	//test_element_draw1();
 	_CrtDumpMemoryLeaks();
 	getchar();
 }

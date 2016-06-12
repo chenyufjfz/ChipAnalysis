@@ -1,9 +1,11 @@
 #ifndef ELEMENT_H
 #define ELEMENT_H
 
+#include <QRect>
 #include <QLine>
 #include <vector>
 #include <string.h>
+#include <typeinfo>
 using namespace std;
 
 #define GET_FIELD(var, field) (((var) & field##_MASK) >> field##_SHIFT)
@@ -255,6 +257,9 @@ bool cross_rect(const QRect & rect, const QLine & line)
 	return false;
 }
 
+/*
+Input: rect include edge
+*/
 int intersect(const QRect & rect, const QLine & line)
 {
 	bool in0, in1;
@@ -581,6 +586,40 @@ public:
             attach = new_attach;
         }
     }
+protected:
+	void set_attach_size(unsigned size)
+	{
+		Q_ASSERT(size <= 1020);
+		SET_FIELD(pack_info, ATTACH_SIZE, size);
+	}
+
+	void set_scale(unsigned scale)
+	{
+		Q_ASSERT(scale <= 3);
+		SET_FIELD(pack_info, SCALE, scale);
+	}
+
+	int set_layer_min(unsigned char layer)
+	{
+		Q_ASSERT(layer <= 31);
+		SET_FIELD(pack_info, LAYER_MIN, layer);
+		return 0;
+	}
+
+	int set_layer_max(unsigned char layer)
+	{
+		Q_ASSERT(layer <= 31);
+		SET_FIELD(pack_info, LAYER_MAX, layer);
+		return 0;
+	}
+
+	int set_layer_num(unsigned char layer_num)
+	{
+		Q_ASSERT(layer_num <= 31);
+		SET_FIELD(pack_info, LAYER_NUM, layer_num);
+		return 0;
+	}
+
 public:
     MemVWPoint()
     {
@@ -694,11 +733,10 @@ public:
         return GET_FIELD(pack_info, ATTACH_SIZE);
     }
 
-    void set_attach_size(unsigned size)
-    {
-        Q_ASSERT(size <= 1020);
-        SET_FIELD(pack_info, ATTACH_SIZE, size);
-    }
+	unsigned get_scale() const
+	{
+		return GET_FIELD(pack_info, SCALE);
+	}
 
     unsigned short get_attach_cap()
     {
@@ -718,23 +756,9 @@ public:
         return GET_FIELD(pack_info, LAYER_NUM);
     }
 
-    int set_layer_num(unsigned char layer_num)
-    {
-        Q_ASSERT(layer_num <= 31);
-        SET_FIELD(pack_info, LAYER_NUM, layer_num);
-        return 0;
-    }
-
-    unsigned char get_layer_min() const
+	unsigned char get_layer_min() const
     {
         return GET_FIELD(pack_info, LAYER_MIN);
-    }
-
-    int set_layer_min(unsigned char layer)
-    {
-        Q_ASSERT(layer <= 31);
-        SET_FIELD(pack_info, LAYER_MIN, layer);
-        return 0;
     }
 
     unsigned char get_layer_max() const
@@ -742,12 +766,19 @@ public:
         return GET_FIELD(pack_info, LAYER_MAX);
     }
 
-    int set_layer_max(unsigned char layer)
-    {
-        Q_ASSERT(layer <= 31);
-        SET_FIELD(pack_info, LAYER_MAX, layer);
-        return 0;
-    }
+	unsigned compute_line_scale(unsigned wx, unsigned wy)
+	{
+		unsigned dx = (x >= wx) ? x - wx : wx - x;
+		unsigned dy = (y >= wy) ? y - wy : wy - y;
+		unsigned d = (dx > dy) ? dx : dy;
+		if (d > 0x80000)
+			return 3;
+		if (d > 0x40000)
+			return 2;
+		if (d > 0x20000)
+			return 1;
+		return 0;
+	}
 
     bool get_isvia() const
     {
@@ -930,6 +961,30 @@ public:
         }
     }
 
+	unsigned recompute_scale()
+	{
+		unsigned scale = 0;
+		vector<unsigned char> layers;
+		get_layers(layers);
+		for (int i = 0; i < layers.size(); i++) {
+			if (layers[i] != INST_LAYER) {
+				vector <PairPoint> rp;
+				get_layer_wire(layers[i], rp);
+				for (int j = 0; j < rp.size(); j++) {
+					unsigned line_scale = compute_line_scale(rp[j].wp.x, rp[j].wp.y);
+					if (scale < line_scale) {
+						scale = line_scale;
+						if (scale == 3)
+							break;
+					}
+				}
+			}
+			if (scale == 3)
+				break;
+		}
+		return scale;
+	}
+
 	int intersect(const QLine & wire, unsigned char layer, bool exclude_p0, bool exclude_p1)
 	{
 		int rc;
@@ -956,8 +1011,29 @@ public:
 		return NOINTERSECTION;
 	}
 
+	bool intersect(const QRect &rect)
+	{
+		QLine line;
+
+		line.setP1(QPoint(x, y));
+		vector<unsigned char> layers;
+		get_layers(layers);
+		for (int i = 0; i < layers.size(); i++) {
+			if (layers[i] != INST_LAYER) {
+				vector <PairPoint> rp;
+				get_layer_wire(layers[i], rp);
+				for (int j = 0; j < rp.size(); j++) {
+					line.setP2(QPoint(rp[j].wp.x, rp[j].wp.y));
+					if (::intersect(rect, line) != NOINTERSECTION)
+						return true;
+				}
+			}
+		}
+		return false;
+	}
+
     //if success return 0, else return -1
-    int delete_layer_wire(unsigned char layer, unsigned x, unsigned y, unsigned short port=0)
+    int delete_layer_wire(unsigned char layer, unsigned wx, unsigned wy, unsigned short port=0)
     {
         unsigned layer_num = get_layer_num();
         unsigned short ref = 0;
@@ -966,11 +1042,11 @@ public:
         get_layer_wire(layer, rp);
         for (int i = 0; i < rp.size(); i++) {
             if (layer == INST_LAYER) {
-                if (rp[i].ip.x == x && rp[i].ip.y ==y && rp[i].ip.port == port)
-                    del_idx = i;
+				if (rp[i].ip.x == wx && rp[i].ip.y == wy && rp[i].ip.port == port)
+					del_idx = i;
             }
             else {
-                if (rp[i].wp.x == x && rp[i].wp.y == y)
+                if (rp[i].wp.x == wx && rp[i].wp.y == wy)
                     del_idx = i;
             }
         }
@@ -1003,6 +1079,10 @@ public:
                     attach[ref] -= del_size;
 					SET_FIELD(attach[ref + 1], CONNECT_NUM, rp.size() - 2);
                 }
+				//finish Modify, recompute scale
+				unsigned current_scale = get_scale();
+				if (current_scale != 0 && current_scale == compute_line_scale(wx, wy))
+					set_scale(recompute_scale());
 				return 0;
             }
 			last_layer = GET_FIELD(attach[ref + 1], LAYER);
@@ -1139,6 +1219,9 @@ public:
             attach[ref] += insert_len - 2;
 			SET_FIELD(attach[ref + 1], CONNECT_NUM, cnum + 1);
         }
+		unsigned new_line_scale = compute_line_scale(wx, wy);
+		if (new_line_scale > get_scale())
+			set_scale(new_line_scale);
 		return 0;
     }
 

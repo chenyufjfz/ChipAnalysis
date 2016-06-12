@@ -21,13 +21,17 @@ SOURCES += main.cpp\
     clientthread.cpp \
     renderimage.cpp \
     connectview.cpp \
-    globalconst.cpp
+    globalconst.cpp \
+    elementclient.cpp \
+    renderelement.cpp
 
 HEADERS  += extractwindow.h \
     clientthread.h \
     renderimage.h \
     connectview.h \
-    globalconst.h
+    globalconst.h \
+    elementclient.h \
+    renderelement.h
 
 FORMS    += \
     extractwindow.ui

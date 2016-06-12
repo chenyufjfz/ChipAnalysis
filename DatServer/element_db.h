@@ -1,7 +1,6 @@
 #ifndef ELEMENT_DB_H
 #define ELEMENT_DB_H
 
-#include <QRect>
 #include "element.h"
 #include "lmdb.h"
 #include <map>

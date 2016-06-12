@@ -19,14 +19,18 @@ win32:LIBS += -lWs2_32 -ladvapi32
 SOURCES += main.cpp\
         serverwindow.cpp \
     serverthread.cpp \
-    iclayer.cpp
+    iclayer.cpp \
+    elementserverrd.cpp \
+    elementserverwr.cpp
 
 HEADERS  += serverwindow.h \
     serverthread.h \
     communication.hpp \
     iclayer.h \
     element_db.h \
-    element.h
+    element.h \
+    elementserverrd.h \
+    elementserverwr.h
 
 FORMS    += serverwindow.ui
 DESTDIR = $$_PRO_FILE_PWD_/../app
