@@ -8,9 +8,19 @@ GlobalConst::GlobalConst()
     _num_block_x = 11;
     _num_block_y = 11;
     _num_layer = 1;
-    _pixel_bu = 1;
+	_pixel_bu = 32768 / _img_block_w;
     x0=0;
     y0=0;
+}
+
+void GlobalConst::set(int img_block_w, int img_block_h, int num_block_x, int num_block_y, int num_layer)
+{
+    _img_block_w = img_block_w; //server side image width in pixel
+    _img_block_h = img_block_h; //server side image height in pixel
+    _num_block_x = num_block_x;
+    _num_block_y = num_block_y;
+    _num_layer = num_layer;
+    _pixel_bu = 32768 / _img_block_w;
 }
 
 int GlobalConst::img_block_w() const
@@ -71,6 +81,11 @@ int GlobalConst::tot_width_bu() const
 int GlobalConst::tot_height_bu() const
 {
     return _img_block_h * _num_block_y * _pixel_bu;
+}
+
+QRect GlobalConst::bound_rect_bu() const
+{
+	return QRect(x0, y0, tot_width_bu(), tot_height_bu());
 }
 
 QRect GlobalConst::bu2pixel(const QRect &r) const

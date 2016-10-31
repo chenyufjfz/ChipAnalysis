@@ -7,6 +7,15 @@
 #define CHECK(test, msg) ((test) ? (void)0 : ((void)fprintf(stderr, \
     "%s:%d: %s: %d, %s\n", __FILE__, __LINE__, msg, rc, mdb_strerror(rc)), abort()))
 
+struct MultiMemPointCmp {
+	bool operator ()(const MemPoint *lhs, const MemPoint *rhs) const
+	{
+		if (lhs->y != rhs->y)
+			return lhs->y > rhs->y;
+		return lhs->x > rhs->x;
+	}
+};
+
 int test_element0()
 {
 	unsigned x0 = 0x08000000, y0 = 0x078000000;
@@ -905,87 +914,87 @@ int test_cross()
 	QLine l18(100, 99, 199, 0);
 	QLine l19(0, 50, 200, 150);
 	QPoint p;
-	if (intersect(l1, l2, p) != BOUNDINTERSECTION1)
+	if (Graph::intersect(l1, l2, p) != Graph::BOUNDINTERSECTION1)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l2, l1, p) != TEXTEND1)
+	if (Graph::intersect(l2, l1, p) != Graph::TEXTEND1)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l2, l3, p) != CENTERINTERSECTION)
+	if (Graph::intersect(l2, l3, p) != Graph::CENTERINTERSECTION)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l1, l3, p) != PARALLEL)
+	if (Graph::intersect(l1, l3, p) != Graph::PARALLEL)
 		return -1;
-	if (intersect(l1, l4, p) != LEXTEND1)
+	if (Graph::intersect(l1, l4, p) != Graph::LEXTEND1)
 		return -1;
-	if (intersect(l4, l1, p) != LEXTEND1)
-		return -1;
-	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l3, l4, p) != TEXTEND1)
+	if (Graph::intersect(l4, l1, p) != Graph::LEXTEND1)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l1, l5, p) != EXTEND1)
-		return -1;
-	if (intersect(l1, l6, p) != PARALLEL)
-		return -1;
-	if (intersect(l5, l6, p) != EXTEND1)
-		return -1;
-	if (intersect(l6, l5, p) != EXTEND2)
-		return -1;
-	if (intersect(l6, l7, p) != NOINTERSECTION)
-		return -1;
-	if (intersect(l1, l7, p) != TEXTEND1)
-		return -1;
-	if (intersect(l7, l1, p) != BOUNDINTERSECTION1)
+	if (Graph::intersect(l3, l4, p) != Graph::TEXTEND1)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l2, l7, p) != CENTERINTERSECTION)
+	if (Graph::intersect(l1, l5, p) != Graph::EXTEND1)
 		return -1;
-	if (intersect(l1, l8, p) != PARALLEL)
+	if (Graph::intersect(l1, l6, p) != Graph::PARALLEL)
 		return -1;
-	if (intersect(l7, l8, p) != NOINTERSECTION)
+	if (Graph::intersect(l5, l6, p) != Graph::EXTEND1)
 		return -1;
-	if (intersect(l7, l9, p) != INCLUDEEDBY)
+	if (Graph::intersect(l6, l5, p) != Graph::EXTEND2)
 		return -1;
-	if (intersect(l9, l7, p) != INCLUDE)
+	if (Graph::intersect(l6, l7, p) != Graph::NOINTERSECTION)
 		return -1;
-	if (intersect(l10, l2, p) != INCLUDEEDBY)
+	if (Graph::intersect(l1, l7, p) != Graph::TEXTEND1)
 		return -1;
-	if (intersect(l2, l10, p) != INCLUDE)
-		return -1;
-	if (intersect(l12, l1, p) != LEXTEND2)
-		return -1;
-	if (intersect(l1, l12, p) != LEXTEND2)
-		return -1;
-	if (intersect(l3, l12, p) != TEXTEND2)
+	if (Graph::intersect(l7, l1, p) != Graph::BOUNDINTERSECTION1)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l12, l3, p) != BOUNDINTERSECTION2)
+	if (Graph::intersect(l2, l7, p) != Graph::CENTERINTERSECTION)
+		return -1;
+	if (Graph::intersect(l1, l8, p) != Graph::PARALLEL)
+		return -1;
+	if (Graph::intersect(l7, l8, p) != Graph::NOINTERSECTION)
+		return -1;
+	if (Graph::intersect(l7, l9, p) != Graph::INCLUDEEDBY)
+		return -1;
+	if (Graph::intersect(l9, l7, p) != Graph::INCLUDE)
+		return -1;
+	if (Graph::intersect(l10, l2, p) != Graph::INCLUDEEDBY)
+		return -1;
+	if (Graph::intersect(l2, l10, p) != Graph::INCLUDE)
+		return -1;
+	if (Graph::intersect(l12, l1, p) != Graph::LEXTEND2)
+		return -1;
+	if (Graph::intersect(l1, l12, p) != Graph::LEXTEND2)
+		return -1;
+	if (Graph::intersect(l3, l12, p) != Graph::TEXTEND2)
 		return -1;
 	printf("x=%d, y=%d\n", p.x(), p.y());
-	if (intersect(l7, l13, p) != LEXTEND2)
+	if (Graph::intersect(l12, l3, p) != Graph::BOUNDINTERSECTION2)
 		return -1;
-	if (intersect(l13, l7, p) != LEXTEND1)
+	printf("x=%d, y=%d\n", p.x(), p.y());
+	if (Graph::intersect(l7, l13, p) != Graph::LEXTEND2)
 		return -1;
-	if (intersect(l7, l14, p) != TEXTEND2)
+	if (Graph::intersect(l13, l7, p) != Graph::LEXTEND1)
 		return -1;
-	if (intersect(l14, l7, p) != BOUNDINTERSECTION2)
+	if (Graph::intersect(l7, l14, p) != Graph::TEXTEND2)
 		return -1;
-	if (intersect(l14, l2, p) != NOINTERSECTION)
+	if (Graph::intersect(l14, l7, p) != Graph::BOUNDINTERSECTION2)
 		return -1;
-	if (intersect(l7, l15, p) != NOINTERSECTION)
+	if (Graph::intersect(l14, l2, p) != Graph::NOINTERSECTION)
 		return -1;
-	if (intersect(l14, l16, p) != PARALLEL)
+	if (Graph::intersect(l7, l15, p) != Graph::NOINTERSECTION)
 		return -1;
-	if (intersect(l7, l16, p) != CENTERINTERSECTION)
+	if (Graph::intersect(l14, l16, p) != Graph::PARALLEL)
 		return -1;
-	if (intersect(l7, l17, p) != NOINTERSECTION)
+	if (Graph::intersect(l7, l16, p) != Graph::CENTERINTERSECTION)
 		return -1;
-	if (intersect(l18, l7, p) != NOINTERSECTION)
+	if (Graph::intersect(l7, l17, p) != Graph::NOINTERSECTION)
 		return -1;
-	if (intersect(l19, l17, p) != NOINTERSECTION)
+	if (Graph::intersect(l18, l7, p) != Graph::NOINTERSECTION)
 		return -1;
-	if (intersect(l18, l19, p) != NOINTERSECTION)
+	if (Graph::intersect(l19, l17, p) != Graph::NOINTERSECTION)
+		return -1;
+	if (Graph::intersect(l18, l19, p) != Graph::NOINTERSECTION)
 		return -1;
 	printf("test cross success\n");
 	return 0;
@@ -1308,7 +1317,7 @@ int test_element_draw1()
 
 	DBProject *prj = new DBProject(env, NULL);
 
-	for (int test_num = 100000; test_num >= 0; test_num--) {
+	for (int test_num = 10; test_num >= 0; test_num--) {
 		int x, y;
 		E(prj->new_write_txn());
 		rand_xy(x, y, max_x, max_y);
@@ -1382,5 +1391,116 @@ int test_element_draw1()
 	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n",
 		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
 	printf("test_element_draw1 success\n");
+	return 0;
+}
+
+int test_element_draw2()
+{
+	MDB_env *env;
+	int rc;
+	int max = 0x1ffffff; //max_x and max_y should be same
+	vector<PointPatch*> patch;
+	MDB_stat mst;
+
+	mdb_init();
+	srand(1);
+
+	remove("./db");
+	remove("./db-lock");
+	E(mdb_env_create(&env));
+	E(mdb_env_set_maxreaders(env, 2));
+	E(mdb_env_set_mapsize(env, 0x800000000));
+	E(mdb_env_set_maxdbs(env, 64));
+	E(mdb_env_open(env, "./db", MDB_NOMETASYNC | MDB_NOSUBDIR, 0664));
+
+	DBProject *prj = new DBProject(env, NULL);
+
+	for (int test_num = 10; test_num >= 0; test_num--) {
+		int x, y;
+		E(prj->new_write_txn());
+		rand_xy(x, y, max, max);
+		QLine xie; 
+		if (x > y)
+			xie.setLine(x - y, 0, max, max - x + y);
+		else
+			xie.setLine(0, y - x, max + x - y, max);
+		E(prj->add_wire(xie, 1, true, true, patch));
+		if (patch.size() != 1 || !patch[0]->old_points.empty() || patch[0]->new_points.size() != 2) {
+			printf("addline patch oldpoint should be empty, check error");
+			return -6;
+		}
+		E(prj->make_point_on_line(xie, QPoint(x, y), 1, patch));
+		prj->free_patch(patch);
+		QLine xie2;
+		if (x + y > max) 
+			xie2.setLine(x + y - max, max, x, y);		
+		else
+			xie2.setLine(0, x + y, x, y);
+		E(prj->add_wire(xie2, 1, true, false, patch));
+		if (patch.size() != 1 || patch[0]->old_points.size() != 1 || patch[0]->new_points.size() != 2) {
+			printf("add point patch error");
+			return -8;
+		}
+		prj->free_patch(patch);
+		if (x + y > max)
+			xie2.setLine(x, y, max, x + y - max);
+		else
+			xie2.setLine(x, y, x + y, 0);
+		E(prj->add_wire(xie2, 1, false, true, patch));
+		if (patch.size() != 1 || patch[0]->old_points.size() != 1 || patch[0]->new_points.size() != 2) {
+			printf("add point patch error");
+			return -8;
+		}
+		prj->free_patch(patch);
+		for (unsigned op_num = 0; op_num < 21; op_num++) {
+			int x0, y0, x1, y1;
+			bool same_quad = true;
+
+			rand_xy(x0, y0, max, max);
+			rand_xy(x1, y1, max, max);
+			if (SGN(x0 + y0 - x - y) * SGN(x1 + y1 - x - y) <= 0 || SGN(x0 - y0 - x + y) *SGN(x1 - y1 - x + y) <= 0)
+				same_quad = false;
+			if (x0 == x && y0 == y || x1 == x && y1 == y)
+				continue;
+			rc = prj->add_wire(QLine(x0, y0, x1, y1), 1, true, true, patch);
+			if (same_quad && rc != Success)  {
+				printf("add wire should success, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+					x, y, x0, y0, x1, y1);
+				return -1;
+			}
+			if (!same_quad && rc == Success) {
+				printf("add wire should fail, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+					x, y, x0, y0, x1, y1);
+				return -2;
+			}
+			if (rc != Success && !patch.empty()) {
+				printf("add wire fail patch should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+					x, y, x0, y0, x1, y1);
+				return -3;
+			}
+			if (rc == Success) {
+				if (!patch[0]->old_points.empty()) {
+					printf("addline patch oldpoint should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+						x, y, x0, y0, x1, y1);
+					return -4;
+				}
+				prj->free_patch(patch);
+				E(prj->delete_wire(QLine(x0, y0, x1, y1), QLine(x0, y0, x1, y1), 1, patch));
+				if (!patch[0]->new_points.empty()) {
+					printf("deleteline patch newpoint should be empty, check error,x=%d;y=%d,x0=%d,y0=%d,x1=%d,y1=%d",
+						x, y, x0, y0, x1, y1);
+					return -5;
+				}
+				prj->free_patch(patch);
+			}
+		}
+		E(prj->close_write_txn(false));
+	}
+	delete prj;
+	E(mdb_env_stat(env, &mst));
+	mdb_env_close(env);
+	printf("bracpage=%d, depth=%d, entry=%d, leafpage=%d, ovflpage=%d, psize=%d\n",
+		mst.ms_branch_pages, mst.ms_depth, mst.ms_entries, mst.ms_leaf_pages, mst.ms_overflow_pages, mst.ms_psize);
+	printf("test_element_draw2 success\n");
 	return 0;
 }

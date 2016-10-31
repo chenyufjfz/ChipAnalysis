@@ -11,13 +11,13 @@
 
 //following parameter is for render_bkimg
 const int scale_para0 = 12; //bigger, clearer
-const int preload_para = 10;
+const int preload_para = 10; //larger, preload more
 const int render_time_para = 2000;
 //following parameter is for congest control
 const int max_load_packet_sent = 6;
 const int max_preload_packet_sent = 8;
-const int scale_score[] = {81, 27, 9, 3, 1};
-const int max_score_init = 190;
+const int scale_score[] = {81, 27, 9, 3, 1}; //each scale score
+const int max_score_init = 190; //total packet score can't exceed max_score_init
 const int cache_size[] = {10, 20, 50, 120, 280};
 extern RakNet::RakPeerInterface *rak_peer;
 extern RakNet::SystemAddress server_addr;
@@ -29,7 +29,7 @@ RenderImage::RenderImage(QObject *parent) : QObject(parent)
     connect_to_server =false;
     max_score = max_score_init;
     req_score = 0;
-    for (char s=0; s<MAX_SCALE; s++) {
+    for (char s=0; s<IMAGE_MAX_SCALE; s++) {
         for (int i=0; i<cache_size[s]; i++)
             cache_list[s].push_back(INVALID_MAP_ID);
     }
@@ -67,15 +67,15 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
     QRect rpixel = gcst.bu2pixel(rect);
     int w=gcst.img_block_w(), h=gcst.img_block_h();
 
-    for (scale=0; scale<MAX_SCALE; scale++) {
+    for (scale=0; scale<IMAGE_MAX_SCALE; scale++) {
         if (rpixel.width() *10 /gcst.img_block_w()  <= screen.width() * scale_para0 /w  &&
             rpixel.height() *10 /gcst.img_block_h() <= screen.height() *scale_para0 /h)
             break;
         w = w>>1;
         h = h>>1;
     }
-    if (scale >=MAX_SCALE) {
-        qWarning("Repair me, still no");
+    if (scale >=IMAGE_MAX_SCALE) {
+        qWarning("Repair me, still no"); //TODO, add thumbnail
         return;
     }
 
@@ -131,7 +131,7 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
                 preq->second.load_queue.push_back(id);
                 qDebug("Add load queue l=%d, (%d,%d,%d)", layer, scale, y, x);
                 if (rt==RETURN_WHEN_PART_READY) {
-                    for (s = scale+1; s<MAX_SCALE; s++) {
+                    for (s = scale+1; s<IMAGE_MAX_SCALE; s++) {
                         id = sxy2mapid(layer, s, x, y);
                         pmap =cache_map.find(id);
                         if (pmap!=cache_map.end()) {
@@ -180,8 +180,8 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
             rt==RETURN_UNTIL_ALL_READY && preq->second.load_queue.empty()) {
         QRect render_rect_pixel(QPoint(rpixel.left()/gcst.img_block_w()*gcst.img_block_w(),
                                 rpixel.top()/gcst.img_block_h()*gcst.img_block_h()),
-                                QPoint(rpixel.right()/gcst.img_block_w()*gcst.img_block_w()+gcst.img_block_w(),
-                                rpixel.bottom()/gcst.img_block_h()*gcst.img_block_h()+gcst.img_block_h()));
+                                QPoint(rpixel.right()/gcst.img_block_w()*gcst.img_block_w()+gcst.img_block_w()-1,
+                                rpixel.bottom()/gcst.img_block_h()*gcst.img_block_h()+gcst.img_block_h()-1));
 
         emit render_bkimg_done(layer, gcst.pixel2bu(render_rect_pixel), screen,
                        image, preq->second.load_queue.empty(), preq->first);
@@ -198,7 +198,7 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
     if (preload_enable) {
         int dmax = (rpixel.width()*preload_para/gcst.img_block_w() + rpixel.height()*preload_para/gcst.img_block_h())/20 +1;
         dmax = (dmax==1) ? 2 : dmax;
-        unsigned char s2 = min(scale+2, MAX_SCALE-1);
+        unsigned char s2 = min(scale+2, IMAGE_MAX_SCALE-1);
         for (int d=1; d<dmax; d++) {
             int x, y;
             map<MapID, Bkimg>::iterator pmap;
@@ -322,7 +322,7 @@ void RenderImage::bkimg_packet_arrive(void * p)
            rsp_pkt->layer, rsp_pkt->scale, rsp_pkt->y, rsp_pkt->x, packet->length);
 
     //following code check checksum
-#if ENABLE_CHECK_SUM_BKIMG & 1
+#if ENABLE_CHECK_SUM_BKIMG & ENABLE_CHECK_SUM
     {
         CHECKSUM_TYPE cksum=0;
         CHECKSUM_TYPE *p = (CHECKSUM_TYPE *) &packet->data[sizeof(RspBkImgPkt)];
@@ -340,9 +340,11 @@ void RenderImage::bkimg_packet_arrive(void * p)
         req_pkt_queue.erase(rsp_id);
         req_score -= scale_score[rsp_pkt->scale];
         Q_ASSERT(req_score>=0);
-    }
+	}
+	else
+		qWarning("receive pkt is not in request queue");
 
-    for (s=rsp_pkt->scale; s<MAX_SCALE; s++) {
+    for (s=rsp_pkt->scale; s<IMAGE_MAX_SCALE; s++) {
         MapID id = sxy2mapid(rsp_pkt->layer, s, rsp_pkt->x, rsp_pkt->y);
         for (map<const QObject *, RenderRequest>::iterator it = view_request.begin(); it!=view_request.end(); it++) {
             list <MapID>::iterator rit = find(it->second.load_queue.begin(), it->second.load_queue.end(), id);
@@ -370,7 +372,7 @@ void RenderImage::bkimg_packet_arrive(void * p)
 		img.plist--;
         Q_ASSERT(*img.plist == rsp_id);
         cache_map[rsp_id] = img;
-        if (rsp_pkt->scale < MAX_SCALE-1) { //check and delete up-scale image
+        if (rsp_pkt->scale < IMAGE_MAX_SCALE-1) { //check and delete up-scale image
             MapID id_1 = sxy2mapid(rsp_pkt->layer, rsp_pkt->scale+1, rsp_pkt->x, rsp_pkt->y);
             map<MapID, Bkimg>::iterator it = cache_map.find(id_1);
             if (it !=cache_map.end()) {
@@ -430,7 +432,7 @@ void RenderImage::send_server_req(const QObject * view)
         for (; pview->second.rrp_load !=pview->second.load_queue.end(); pview->second.rrp_load++) {
             MapID id = *pview->second.rrp_load;
             mapid2sxy(id, pkt.layer, pkt.scale, pkt.x, pkt.y);
-            Q_ASSERT(pkt.scale<MAX_SCALE);
+            Q_ASSERT(pkt.scale<IMAGE_MAX_SCALE);
             if (req_score + scale_score[pkt.scale] > max_score) //too big packet, congest control
                 continue;
             bool already_request = false;
@@ -444,7 +446,7 @@ void RenderImage::send_server_req(const QObject * view)
             if (already_request)
                 continue;            
             rak_peer->Send((char *)&pkt, sizeof(ReqBkImgPkt), MEDIUM_PRIORITY,
-                   RELIABLE, 0, server_addr, false);
+				RELIABLE_ORDERED, BKIMAGE_STREAM, server_addr, false);
             req_score += scale_score[pkt.scale];
             qDebug("Request Server's BkImg, l=%d, (%d,%d,%d), score=%d", pkt.layer, pkt.scale, pkt.y, pkt.x, req_score);
             req_pkt_queue[id] = cur_time;
@@ -480,7 +482,7 @@ void RenderImage::send_server_req(const QObject * view)
         for (; pview->second.rrp_load !=pview->second.preload_queue.end(); pview->second.rrp_load++) {
             MapID id = *pview->second.rrp_load;
             mapid2sxy(id, pkt.layer, pkt.scale, pkt.x, pkt.y);
-            Q_ASSERT(pkt.scale<MAX_SCALE);
+            Q_ASSERT(pkt.scale<IMAGE_MAX_SCALE);
             if (req_score + scale_score[pkt.scale] > max_score) //too big packet, congest control
                 continue;
             bool already_request = false;
@@ -494,7 +496,7 @@ void RenderImage::send_server_req(const QObject * view)
             if (already_request)
                 continue;
             rak_peer->Send((char *)&pkt, sizeof(ReqBkImgPkt), MEDIUM_PRIORITY,
-                   RELIABLE, 0, server_addr, false);
+				RELIABLE_ORDERED, BKIMAGE_STREAM, server_addr, false);
             req_score += scale_score[pkt.scale];
             qDebug("Request Server preload BkImg, l=%d, (%d,%d,%d), score=%d",
                    pkt.layer, pkt.scale, pkt.y, pkt.x, req_score);
@@ -522,7 +524,7 @@ void RenderImage::remove_cache_list(unsigned char scale)
     unsigned char layer;
     unsigned short x, y;
 
-    if (scale>=MAX_SCALE)
+    if (scale>=IMAGE_MAX_SCALE)
         return;
     MapID id = cache_list[scale].front();
     cache_list[scale].erase(cache_list[scale].begin());
@@ -535,7 +537,7 @@ void RenderImage::remove_cache_list(unsigned char scale)
     mapid2sxy(id, layer, scale, x, y);
     MapID id_1 = sxy2mapid(layer, scale+1, x, y);
     if (cache_map.find(id_1) !=cache_map.end()
-            || scale==MAX_SCALE-1) { //Already cached in higher scale, deleted directly
+            || scale==IMAGE_MAX_SCALE-1) { //Already cached in higher scale, deleted directly
         free(it->second.data);
         cache_map.erase(it);
         qDebug("erase l=%d,(%d,%d,%d)", layer, scale, y, x);
@@ -570,7 +572,7 @@ void RenderImage::timerEvent( QTimerEvent *event)
 {
     switch (self_test) {
     case 1:
-        for (char s=0; s<MAX_SCALE; s++) {
+        for (char s=0; s<IMAGE_MAX_SCALE; s++) {
             if (cache_list[s].size() != cache_size[s])
                 qCritical("Selftest error cache_list[%d] size=%d", s, cache_list[s].size());
         }
@@ -602,6 +604,7 @@ void RenderImage::timerEvent( QTimerEvent *event)
         self_test++;
         break;
     case 4:
+        if (0)
         {
             char text[2048];
             RakNet::RakNetStatistics rss;

@@ -1,33 +1,15 @@
 #include "serverthread.h"
-#include "communication.hpp"
 #include <QFileInfo>
 #include <stdio.h>
 #include <stdlib.h>
-#include "iclayer.h"
 #include "RakSleep.h"
 #include "RakNetStatistics.h"
 #include "GetTime.h"
-RakNet::RakPeerInterface *rak_peer;
+#include "communication.hpp"
+
+RakNet::RakPeerInterface *rak_peer = NULL;
 
 RakNet::TimeMS last_printtime;
-
-ICLayerWr bk_img("../../M6.dat");
-CHECKSUM_TYPE get_bg_img(std::vector<uchar> & data, unsigned char layer, unsigned char scale,
-               unsigned short x, unsigned short y, unsigned reserved)
-{
-    int idx =y;
-    idx = idx*11+x;   
-    bk_img.getRawImgByIdx(data, idx, scale, reserved);
-    CHECKSUM_TYPE cksum=0;
-#if ENABLE_CHECK_SUM_BKIMG & 1
-    if (!data.empty()) {
-        CHECKSUM_TYPE *p = (CHECKSUM_TYPE *) &data[reserved];
-        for (unsigned i=reserved; i+sizeof(CHECKSUM_TYPE)<data.size(); p++, i+=sizeof(CHECKSUM_TYPE))
-            cksum = cksum ^ *p;
-    }
-#endif
-    return cksum;
-}
 
 ServerThread::ServerThread() :QThread(NULL)
 {
@@ -54,57 +36,74 @@ void ServerThread::run()
     rak_peer->SetMaximumIncomingConnections(max_user);
     rak_peer->SetPerConnectionOutgoingBandwidthLimit(10000000);
     last_printtime = RakNet::GetTimeMS();
+#if 1
+    imgdb.add_new_layer("../../M6.dat");
+#endif
     while (!finish)
     {
         for (packet=rak_peer->Receive(); packet; packet=rak_peer->Receive())
         {
+            ServerPerClient * server;
+            map<unsigned long long, ServerPerClient*>::iterator server_it;
+            server_it = server_pools.find(packet->guid.g);
+            if (server_it == server_pools.end())
+                server = NULL;
+            else
+                server = server_it->second;
+            bool need_delete = true;
             switch (packet->data[0])
             {
             case ID_NEW_INCOMING_CONNECTION:
                 qInfo("Another client %s is connected.", packet->systemAddress.ToString());
+                if (server != NULL)
+                    qWarning("Raknet internal error, new connect already have server");
+                server = new ServerPerClient;
+                server_pools[packet->guid.g] = server;
                 break;
             case ID_DISCONNECTION_NOTIFICATION:
                 qInfo("Client %s disconnected.", packet->systemAddress.ToString());
+                if (server!=NULL)
+                    delete server;
+                server_pools.erase(packet->guid.g);
                 break;
             case ID_CONNECTION_LOST:
                 qInfo("Lost connection to Client %s.", packet->systemAddress.ToString());
+                if (server!=NULL)
+                    delete server;
+                server_pools.erase(packet->guid.g);
+                break;
+
+            case ID_REQUIRE_IMG_INFO:
+                RspImgInfoPkt rsp_info;
+                 int num_wide, num_high;
+                rsp_info.typeId = ID_RESPONSE_IMG_INFO;
+                rsp_info.img_block_h = imgdb.get_layer(0)->getBlockWidth();
+                rsp_info.img_block_w = imgdb.get_layer(0)->getBlockWidth();
+                imgdb.get_layer(0)->getBlockNum(num_wide, num_high);
+                rsp_info.num_block_x = num_wide;
+                rsp_info.num_block_y = num_high;
+                rsp_info.num_layer = imgdb.get_layer_num();
+                server->prepare(&imgdb, packet->systemAddress);
+                qInfo("Send bg_img info l=%d,w=%d,h=%d, (%d*%d)", rsp_info.num_layer, rsp_info.num_block_x,
+                      rsp_info.num_block_y, rsp_info.img_block_h, rsp_info.img_block_w);
+                rak_peer->Send((char*) &rsp_info, sizeof(RspImgInfoPkt), IMMEDIATE_PRIORITY,
+                    RELIABLE_ORDERED, BKIMAGE_STREAM, packet->systemAddress, false);
                 break;
 
             case ID_REQUIRE_BG_IMG:
-                {
-                    ReqBkImgPkt * req_pkt = (ReqBkImgPkt *) packet->data;
-                    if  (packet->length != sizeof(ReqBkImgPkt))
-                        qFatal("Client %s send wrong ID_REQUIRE_BG_IMG.",  packet->systemAddress.ToString());
-                    else {
-                        std::vector<uchar> data;
-                        CHECKSUM_TYPE cksum;
-                        cksum = get_bg_img(data, req_pkt->layer, req_pkt->scale,
-                                         req_pkt->x, req_pkt->y, sizeof(RspBkImgPkt));
-                        if (!data.empty()) {
-                            RspBkImgPkt * rsp_pkt = (RspBkImgPkt *) &data[0];
-                            rsp_pkt->typeId = ID_RESPONSE_BG_IMG;
-                            rsp_pkt->scale = req_pkt->scale;
-                            rsp_pkt->x = req_pkt->x;
-                            rsp_pkt->y = req_pkt->y;
-                            rsp_pkt->layer = req_pkt->layer;
-                            rsp_pkt->len = (unsigned)data.size() - sizeof(RspBkImgPkt);
-#if ENABLE_CHECK_SUM_BKIMG & 1
-                            rsp_pkt->check_sum = cksum;
-#endif
-                            qInfo("Send bg_img l=%d, (%d,%d,%d), pkt_size=%d.", req_pkt->layer, req_pkt->scale,
-                                  req_pkt->y, req_pkt->x, data.size());
-                            rak_peer->Send((char*) &data[0], (int)data.size(), static_cast<PacketPriority> (req_pkt->priority),
-                                           RELIABLE_ORDERED, 0, packet->systemAddress, false);
-                        }
-                    }
-                }
+            case ID_REQUIRE_OBJ_SEARCH:
+                need_delete=false;
+                if (server == NULL)
+                    qFatal("Connected Client can't find ServerPerClient");
+                server->handle_client_req(packet);
                 break;
 
             default:
                 qCritical("Message %i arrived from %s.\n", packet->data[0], packet->systemAddress.ToString());
                 break;
             }
-            rak_peer->DeallocatePacket(packet);            
+            if (need_delete)
+                rak_peer->DeallocatePacket(packet);
         }
         RakSleep(5);
         RakNet::TimeMS current_time = RakNet::GetTimeMS();

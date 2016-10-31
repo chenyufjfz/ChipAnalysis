@@ -17,23 +17,24 @@ DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
 win32:LIBS += -lWs2_32 -ladvapi32
 
 SOURCES += main.cpp\
-        extractwindow.cpp \
+    extractwindow.cpp \
     clientthread.cpp \
     renderimage.cpp \
     connectview.cpp \
     globalconst.cpp \
-    elementclient.cpp \
-    renderelement.cpp
+    paramdialog.cpp \
+    searchobject.cpp
 
 HEADERS  += extractwindow.h \
     clientthread.h \
     renderimage.h \
     connectview.h \
     globalconst.h \
-    elementclient.h \
-    renderelement.h
+    paramdialog.h \
+    searchobject.h
 
 FORMS    += \
-    extractwindow.ui
+    extractwindow.ui \
+    paramdialog.ui
 
 DESTDIR = $$_PRO_FILE_PWD_/../app

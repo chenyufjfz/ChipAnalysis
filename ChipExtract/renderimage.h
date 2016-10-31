@@ -11,11 +11,11 @@ using namespace std;
 
 typedef unsigned long long MapID;
 #define INVALID_MAP_ID 0xffffffffffffff
-#define MAX_SCALE 5
+
 typedef enum {
-    RETURN_UNTIL_ALL_READY,
-    RETURN_WHEN_PART_READY,
-    NO_NEED_RETURN
+    RETURN_UNTIL_ALL_READY,  //Return image when all clear subimages are ready, request may be sent to server and wait all clear subimage ready, caller get only one return, and may wait several seconds.
+    RETURN_WHEN_PART_READY,  //Return image immediately, if clear subimage is not ready use blur image instead, and then request may be sent to server and wait all subimage ready, and then return more clear image to caller. So caller may get two or more return. One return is immediate blur image, Another return is clear image after several seconds.
+    NO_NEED_RETURN			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
 } RenderType;
 
 typedef struct {
@@ -36,7 +36,7 @@ typedef struct {
     bool update;  //indicate if load_queue filled by receive packet
     map <MapID, unsigned int> preimg_map;
     int prev_w, prev_h;
-    QImage pre_img;
+    QImage pre_img; //if possible use previous image to save decode time
 } RenderRequest;
 
 
@@ -84,9 +84,11 @@ protected:
 protected:
     bool call_from_packet_arrivce, connect_to_server;
     int self_test, timer_id;
-    map<MapID, RakNet::TimeMS> req_pkt_queue;
+	//each view's request is in RenderRequest's load_queue and preload_queue, 
+	//if req_pkt_queue is within threshold, load_queue and preload_queue is add to req_pkt_queue
+    map<MapID, RakNet::TimeMS> req_pkt_queue; 
     int req_score, max_score;
-    list <MapID> cache_list[MAX_SCALE];
+    list <MapID> cache_list[IMAGE_MAX_SCALE]; //cache_list and cache_map makes back_image local cache
     map<MapID, Bkimg> cache_map;
     map<const QObject *, RenderRequest> view_request;
 };

@@ -1,6 +1,7 @@
 #include "connectview.h"
 #include <QPainter>
 #include "globalconst.h"
+#include <QMessageBox>
 
 extern GlobalConst gcst;
 //following parameter is for view_rect move
@@ -55,8 +56,8 @@ void ConnectView::paintEvent(QPaintEvent *)
                  render_img.width() * view_rect.width() /render_rect.width(),
                  render_img.height()* view_rect.height() /render_rect.height());
     painter.drawImage(QRect(0,0, width(), height()), render_img, source);
-    qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
-           view_rect.right(), view_rect.bottom(), size().width(), size().height());
+    qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d), source=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
+           view_rect.right(), view_rect.bottom(), size().width(), size().height(), source.width(), source.height());
 }
 
 void ConnectView::keyPressEvent(QKeyEvent *e)
@@ -123,11 +124,42 @@ void ConnectView::render_bkimg_done(const unsigned char layer, const QRect rect,
         qWarning("update view receive obsolete image");
         return;
     } else
-        qDebug("render image l=%d,(%d,%d,%d,%d)", layer,
-               rect.left(), rect.top(),rect.right(), rect.bottom());
+        qDebug("render image l=%d,(%d,%d,%d,%d), im=(%d,%d)", layer,
+               rect.left(), rect.top(),rect.right(), rect.bottom(), image.size().width(), image.size().height());
     render_rect = rect;
     render_img = image;
     render_bk_layer = layer;
 
     update();
+}
+
+void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
+{
+    for (int i = 0; i < prst->objs.size(); i++) {
+        qInfo("Found cell (%d,%d) (%d,%d), dir=%d, prob=%f",
+              prst->objs[i].p0.x(), prst->objs[i].p0.y(),
+              prst->objs[i].p1.x(), prst->objs[i].p1.y(),
+              prst->objs[i].type3, prst->objs[i].prob);
+    }
+    QMessageBox::about(this, "Extract done", "Extract done");
+}
+
+void ConnectView::train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3)
+{
+    if (cell_train) {
+        qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
+        QPoint p0(295936, 236864), p1(304768, 241088);
+        emit train_cell(0, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+    }    
+}
+
+void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3)
+{
+    if (cell_train) {
+        qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
+        SearchRects * sr = new SearchRects;
+        sr->dir.push_back(POWER_UP | POWER_DOWN);
+        sr->rects.push_back(QRect(163840, 163840, 163840, 163840));
+        emit extract_cell(0, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+    }
 }

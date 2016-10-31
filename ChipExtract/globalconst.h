@@ -18,12 +18,15 @@ public:
     int bottom_bound() const; //return in bu
     int tot_width_bu() const; //return in bu
     int tot_height_bu() const; //return in bu
+	QRect bound_rect_bu() const; //return bound rect
     QRect bu2pixel(const QRect &r) const; //r in bu, return in pixel
     QRect pixel2bu(const QRect &r) const; //r in pixelm return in bu
     QPoint bu2pixel(const QPoint &r) const; //r in bu, return in pixel
     QPoint pixel2bu(const QPoint &r) const; //r in pixelm return in bu
     QSize bu2pixel(const QSize &r) const; //r in bu, return in pixel
     QSize pixel2bu(const QSize &r) const; //r in pixelm return in bu
+    void set(int img_block_w, int img_block_h, int num_block_x, int num_block_y, int num_layer);
+
 protected:
     int _img_block_w;
     int _img_block_h;
