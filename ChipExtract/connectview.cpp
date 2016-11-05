@@ -1,9 +1,11 @@
 #include "connectview.h"
+#include "objectdb.h"
 #include <QPainter>
 #include "globalconst.h"
 #include <QMessageBox>
 
 extern GlobalConst gcst;
+extern ObjectDB odb;
 //following parameter is for view_rect move
 const int step_para =3;
 const double min_scale = 0.5;
@@ -20,6 +22,31 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
     setAutoFillBackground(false);
     setAttribute( Qt::WA_OpaquePaintEvent, true );
     setAttribute( Qt::WA_NoSystemBackground, true );
+}
+
+void ConnectView::draw_element(QPainter &painter)
+{
+	vector<ElementObj*> rst;
+	odb.get_objects(OBJ_AREA, AREA_CELL_MASK | AREA_LEARN_MASK | AREA_EXTRACT_MASK, view_rect, rst);
+	painter.setBrush(QBrush(Qt::NoBrush));
+	for (unsigned i = 0; i < rst.size(); i++) {
+		switch (rst[i]->type2) {
+		case AREA_CELL:
+			painter.setPen(QPen(Qt::red, 1));
+			break;
+		case AREA_LEARN:
+			painter.setPen(QPen(Qt::blue, 1));
+			break;
+		case AREA_EXTRACT:
+			painter.setPen(QPen(Qt::yellow, 1));
+			break;
+		}
+		QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
+			height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
+		QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
+			height()* (rst[i]->p1.y() - view_rect.top()) / view_rect.height());
+		painter.drawRect(QRect(p0, p1));
+	}
 }
 
 void ConnectView::paintEvent(QPaintEvent *)
@@ -49,6 +76,11 @@ void ConnectView::paintEvent(QPaintEvent *)
         return;
     }
 
+    if (render_rect.width() > view_rect.width() * 3 || render_rect.height() > view_rect.height() * 3) {
+        qDebug("request clear image l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
+               view_rect.right(), view_rect.bottom(), size().width(), size().height());
+        emit render_bkimg(bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
+    }
     QPainter painter(this);
 
     QRect source(render_img.width() * (view_rect.left() - render_rect.left()) / render_rect.width(),
@@ -56,6 +88,8 @@ void ConnectView::paintEvent(QPaintEvent *)
                  render_img.width() * view_rect.width() /render_rect.width(),
                  render_img.height()* view_rect.height() /render_rect.height());
     painter.drawImage(QRect(0,0, width(), height()), render_img, source);
+
+	draw_element(painter);
     qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d), source=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
            view_rect.right(), view_rect.bottom(), size().width(), size().height(), source.width(), source.height());
 }
@@ -140,6 +174,8 @@ void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
               prst->objs[i].p0.x(), prst->objs[i].p0.y(),
               prst->objs[i].p1.x(), prst->objs[i].p1.y(),
               prst->objs[i].type3, prst->objs[i].prob);
+        ElementObj obj(prst->objs[i]);
+        odb.add_object(obj);
     }
     QMessageBox::about(this, "Extract done", "Extract done");
 }

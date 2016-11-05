@@ -13,7 +13,7 @@
 struct SearchArea {
 	QRect rect;	
 	int option;
-	SearchArea(QRect &r, int o) {
+    SearchArea(QRect r, int o) {
 		rect = r;
 		option = o;
 	}

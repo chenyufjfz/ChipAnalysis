@@ -9,25 +9,48 @@ struct MarkObj {
     unsigned char type;
     unsigned char type2;
     unsigned char type3;
-    unsigned char select_state;
+    unsigned char state;
     QPoint p0, p1;
     float prob;
 };
 
 #pragma pack(pop)
 
-enum {
-    OBJ_NONE=0,
+enum {    
     OBJ_AREA,
-    OBJ_WIRE,
-    OBJ_VIA,
+    OBJ_LINE,
+    OBJ_POINT,
+    OBJ_PARA,
+	OBJ_NONE,
     SELECT_OBJ
 };
 
 enum {
-    AREA_LEARN=0,
+    AREA_LEARN,
+	AREA_EXTRACT,
     AREA_METAL,
-    AREA_CELL
+    AREA_CELL	
+};
+
+enum {
+    POINT_NORMAL_VIA0,
+    POINT_NORMAL_VIA1,
+    POINT_NORMAL_VIA2,
+    POINT_NORMAL_VIA3,
+    POINT_CELL,
+	POINT_WORD
+};
+
+enum {
+    LINE_NORMAL_WIRE0,
+    LINE_NORMAL_WIRE1,
+    LINE_NORMAL_WIRE2,
+    LINE_NORMAL_WIRE3
+};
+
+enum {
+    PARA_LINE_WIDTH,
+    PARA_VIA_RADIUS
 };
 
 #define POWER_UP_L      1
@@ -44,6 +67,29 @@ enum {
 #define	POWER_LEFT		(POWER_LEFT_U | POWER_LEFT_D)
 #define	POWER_RIGHT		(POWER_RIGHT_U | POWER_RIGHT_D)
 
+#define OBJ_AREA_MASK	(1<<OBJ_AREA)
+#define OBJ_LINE_MASK	(1<<OBJ_LINE)
+#define OBJ_POINT_MASK	(1<<OBJ_POINT)
+#define OBJ_WORD_MASK	(1<<OBJ_WORD)
+#define OBJ_PARA_MASK	(1<<OBJ_PARA)
 
+#define AREA_LEARN_MASK		(1<<AREA_LEARN)
+#define AREA_EXTRACT_MASK	(1<<AREA_EXTRACT)
+#define AREA_METAL_MASK		(1<<AREA_METAL)
+#define AREA_CELL_MASK		(1<<AREA_CELL)
+
+#define POINT_NORMAL_VIA0_MASK	(1<<POINT_NORMAL_VIA0)
+#define POINT_NORMAL_VIA1_MASK	(1<<POINT_NORMAL_VIA1)
+#define POINT_NORMAL_VIA2_MASK	(1<<POINT_NORMAL_VIA2)
+#define POINT_NORMAL_VIA3_MASK	(1<<POINT_NORMAL_VIA3)
+#define POINT_CELL_MASK			(1<<POINT_CELL)
+
+#define LINE_NORMAL_WIRE0_MASK	(1<<LINE_NORMAL_WIRE0)
+#define LINE_NORMAL_WIRE1_MASK	(1<<LINE_NORMAL_WIRE1)
+#define LINE_NORMAL_WIRE2_MASK	(1<<LINE_NORMAL_WIRE2)
+#define LINE_NORMAL_WIRE3_MASK	(1<<LINE_NORMAL_WIRE3)
+
+#define PARA_LINE_WIDTH_MASK	(1<<PARA_LINE_WIDTH)
+#define PARA_VIA_RADIUS_MASK	(1<<PARA_VIA_RADIUS)
 #endif // MARKOBJ_H
 

@@ -34,12 +34,13 @@ public:
     void extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
 
 protected:
+	void draw_element(QPainter &painter);
     void paintEvent(QPaintEvent *);
     void keyPressEvent(QKeyEvent *e);    
 
 protected:
     bool connect_to_server;
-    QImage render_img;
+	QImage render_img;
     QRect render_rect, view_rect;
     QPoint center;
     double scale;

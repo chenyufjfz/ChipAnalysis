@@ -19,7 +19,8 @@ unix {
 
 
 
-DESTDIR = $$_PRO_FILE_PWD_/../lib
+Release:DESTDIR = $$_PRO_FILE_PWD_/../lib/release
+Debug:DESTDIR = $$_PRO_FILE_PWD_/../lib/debug
 
 HEADERS += \
     Include/_FindFirst.h \

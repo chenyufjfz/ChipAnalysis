@@ -108,7 +108,7 @@ void SearchObject::search_packet_arrive(void * p)
             obj.type = OBJ_AREA;
             obj.type2 = AREA_CELL;
             obj.type3 = rsp_pkt->result[i].opt;
-            obj.select_state = 0;
+            obj.state = 0;
             obj.prob = rsp_pkt->result[i].prob;
             obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);
             obj.p1 = QPoint(rsp_pkt->result[i].x1, rsp_pkt->result[i].y1);

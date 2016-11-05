@@ -9,8 +9,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    qRegisterMetaType<QSharedPointer<SearchResults>>();
-    qRegisterMetaType<QSharedPointer<SearchRects>>();
+    qRegisterMetaType<QSharedPointer<SearchResults> >();
+    qRegisterMetaType<QSharedPointer<SearchRects> >();
 
     render_thread = new QThread;
     render_image = new RenderImage;

@@ -455,7 +455,7 @@ int CellExtract::extract(string file_name, QRect rect, vector<MarkObj> & obj_set
                             new_cell.type3 = (dir < POWER_UP) ? POWER_UP :
                                 ((dir < POWER_DOWN) ? POWER_DOWN :
                                 ((dir < POWER_LEFT) ? POWER_LEFT : POWER_RIGHT));
-                            new_cell.select_state = 0;
+                            new_cell.state = 0;
                             new_cell.p0 = QPoint(mx, my);
                             new_cell.p1 = QPoint(mx + width, my + height);
                             obj_sets.push_back(new_cell);
@@ -766,7 +766,7 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
             new_cell.type = OBJ_AREA;
             new_cell.type2 = AREA_CELL;
             new_cell.type3 = pr->dir;
-            new_cell.select_state = 0;
+            new_cell.state = 0;
             new_cell.p0 = QPoint(pr->x * scale, pr->y * scale);
             new_cell.p1 = QPoint((pr->x + cwide) * scale, (pr->y + chigh) * scale);
             new_cell.prob = pr->diff;
