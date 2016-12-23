@@ -19,7 +19,7 @@ void ClientThread::end()
 
 void ClientThread::run()
 {
-    char server_ip[] = "127.0.0.1";
+    char server_ip[] = "127.0.0.1"; //"10.233.140.185";
 
     RakNet::SocketDescriptor sd;
     sd.socketFamily = AF_INET;

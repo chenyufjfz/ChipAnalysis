@@ -8,8 +8,14 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-Release:TARGET = ChipExtract
-Debug:TARGET = ChipExtractd
+CONFIG(debug, debug|release) {
+TARGET = ChipExtractd
+LIBS += -L$$_PRO_FILE_PWD_/../lib/debug
+} else {
+TARGET = ChipExtract
+LIBS += -L$$_PRO_FILE_PWD_/../lib/release
+}
+
 TEMPLATE = app
 LIBS += -L$$_PRO_FILE_PWD_/../lib
 LIBS += -lRaknet -lMdb
@@ -17,8 +23,6 @@ INCLUDEPATH += ../Raknet/Include ../Mdb ../DatServer/
 DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
 win32:LIBS += -lWs2_32 -ladvapi32
 
-Release:LIBS += -L$$_PRO_FILE_PWD_/../lib/release
-Debug:LIBS += -L$$_PRO_FILE_PWD_/../lib/debug
 
 SOURCES += main.cpp\
     extractwindow.cpp \

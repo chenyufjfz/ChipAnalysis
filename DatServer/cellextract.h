@@ -9,7 +9,8 @@ class CellFeature {
 protected:
 	int cmp_vector(const vector<int> & tn0, const vector<int> & tn1, int & max_score);
 public:
-	int wunit, hunit, width, height;
+	int wunit, hunit;  //thumb size in pixel
+	int width, height; //cell width and height in pixel
 	vector<int> tn[8]; //0,1 for power up. 2,3 for power down. 4,5 for power left. 6, 7 for power right
 	int valid_area;
 	CellFeature();
@@ -58,19 +59,19 @@ public:
         param3 = param3_;
         return 0;
     }
-	int train(ICLayerWr *ic_layer, const vector<MarkObj> & obj_sets);
-	int extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets);
-	void get_feature(int , int , vector<float> & ) {}
-	Mat get_mark() {
+    int train(vector<ICLayerWr *> & ic_layer, const vector<MarkObj> & obj_sets);
+    int extract(vector<ICLayerWr *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets);
+	void get_feature(int, int , int , vector<float> & ) {}
+	Mat get_mark(int) {
 		return mark;
 	}
-	Mat get_mark1() {
+	Mat get_mark1(int) {
 		return mark1;
 	}
-	Mat get_mark2() {
+	Mat get_mark2(int) {
 		return mark2;
 	}
-	Mat get_mark3() {
+	Mat get_mark3(int) {
 		return mark3;
 	}
 };

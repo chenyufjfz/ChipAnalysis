@@ -22,6 +22,33 @@ struct SearchRects {
 };
 Q_DECLARE_METATYPE(QSharedPointer<SearchRects>)
 
+struct LayerParam {
+    int layer; //which layer
+    int wire_wd; //wire width
+    int via_rd; //via radius
+    int grid_wd; //grid width
+    float param1; //via th, close to 1, higher threshold
+    float param2; //wire th, close to 1, higher threshold
+    float param3; //via_cred vs wire_cred, if via_cred> wire_cred, beta>1; else <1
+    unsigned long long rule; //rule affect bbfm
+    LayerParam(int _layer, int _wire_wd, int _via_rd, unsigned long long _rule, int _grid_wd,
+               float _param1, float _param2, float _param3) {
+        layer = _layer;
+        wire_wd = _wire_wd;
+        via_rd = _via_rd;
+        grid_wd = _grid_wd;
+        rule = _rule;
+        param1 = _param1;
+        param2 = _param2;
+        param3 = _param3;
+    }
+};
+
+struct VWSearchRequest {
+    vector<LayerParam> lpa;
+};
+Q_DECLARE_METATYPE(QSharedPointer<VWSearchRequest>)
+
 class SearchObject : public QObject
 {
     Q_OBJECT
@@ -31,6 +58,7 @@ public:
 
 signals:
     void extract_cell_done(QSharedPointer<SearchResults>);
+    void extract_wire_via_done(QSharedPointer<SearchResults>);
 
 public slots:
     void server_connected();
@@ -40,7 +68,7 @@ public slots:
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
     void extract_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
-
+    void extract_wire_via(QSharedPointer<VWSearchRequest> preq, const QRect rect);
 };
 
 #endif // SEARCHOBJECT_H

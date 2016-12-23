@@ -4,6 +4,8 @@
 #include "searchobject.h"
 #include <vector>
 #include <QRect>
+#include <QMutex>
+#include <string>
 using namespace std;
 
 #define GET_FIELD(var, field) (((var) & field##_MASK) >> field)
@@ -15,6 +17,10 @@ struct ElementObj : public MarkObj
         unsigned long long attach;
         void * ptr;
     } un;
+
+	ElementObj() {
+
+	}
 
     ElementObj(MarkObj &o) : MarkObj(o) {
         un.attach = 0;
@@ -46,6 +52,7 @@ protected:
 	AreaObjLink * root_wire;
 	AreaObjLink * root_via;
 	AreaObjLink * root_area;
+    QMutex mutex;
 
 protected:
     ElementObj * layer_wire_info[256];
@@ -56,6 +63,7 @@ public:
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
     void add_object(ElementObj & obj);
     void del_object(ElementObj * p_obj);
+    int load_objets(string file_name);
     unsigned get_wire_width(unsigned char type, unsigned char layer);
     unsigned get_via_radius(unsigned char type, unsigned char layer);
 };

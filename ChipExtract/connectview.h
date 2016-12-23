@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include "renderimage.h"
 #include "searchobject.h"
 
@@ -20,6 +21,8 @@ signals:
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
     void extract_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
+    void extract_wire_via(QSharedPointer<VWSearchRequest> preq, const QRect rect);
+    void mouse_change(QPoint pos, QString msg);
 
 public slots:
     void server_connected();
@@ -27,16 +30,18 @@ public slots:
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
                            QImage image, bool finish, const QObject * view);
     void extract_cell_done(QSharedPointer<SearchResults> prst);
-
+    void extract_wire_via_done(QSharedPointer<SearchResults> prst);
 
 public:
     void train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
     void extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
+    void load_objects(string file_name);
 
 protected:
 	void draw_element(QPainter &painter);
     void paintEvent(QPaintEvent *);
     void keyPressEvent(QKeyEvent *e);    
+    void mouseMoveEvent(QMouseEvent *event);
 
 protected:
     bool connect_to_server;

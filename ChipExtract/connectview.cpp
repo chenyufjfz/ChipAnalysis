@@ -15,13 +15,14 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
 {    
     scale = 1;
     resize(600, 600);
-    center = QPoint(0,0);
+    center = QPoint(1450000,600000);
     bk_layer = 0;
     render_bk_layer = 0;
     connect_to_server = false;
     setAutoFillBackground(false);
     setAttribute( Qt::WA_OpaquePaintEvent, true );
     setAttribute( Qt::WA_NoSystemBackground, true );
+    setMouseTracking(true);
 }
 
 void ConnectView::draw_element(QPainter &painter)
@@ -47,6 +48,33 @@ void ConnectView::draw_element(QPainter &painter)
 			height()* (rst[i]->p1.y() - view_rect.top()) / view_rect.height());
 		painter.drawRect(QRect(p0, p1));
 	}
+
+    odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, view_rect, rst);
+    painter.setPen(QPen(Qt::blue, 1));
+    if (rst.size()!=0)
+        qDebug("draw %d lines", rst.size());
+    for (unsigned i = 0; i < rst.size(); i++) {
+        if (rst[i]->type3 + 2 == bk_layer) { //TODO fix it
+            QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
+                height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
+            QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
+                height()* (rst[i]->p1.y() - view_rect.top()) / view_rect.height());
+            painter.drawLine(p0, p1);
+        }
+    }
+
+    odb.get_objects(OBJ_POINT, POINT_VIA_AUTO_EXTRACT_MASK, view_rect, rst);
+    painter.setPen(QPen(Qt::green, 1, Qt::DotLine));
+    painter.setBrush(QBrush(Qt::NoBrush));
+    if (rst.size()!=0)
+        qDebug("draw %d vias", rst.size());
+    for (unsigned i = 0; i < rst.size(); i++) {
+        if (rst[i]->type3 + 2 == bk_layer) { //TODO fix it
+            QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
+                height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
+            painter.drawEllipse(p0, 9, 9);
+        }
+    }
 }
 
 void ConnectView::paintEvent(QPaintEvent *)
@@ -76,7 +104,8 @@ void ConnectView::paintEvent(QPaintEvent *)
         return;
     }
 
-    if (render_rect.width() > view_rect.width() * 3 || render_rect.height() > view_rect.height() * 3) {
+    if ((render_rect.width() > view_rect.width() * 3 && render_rect.width() > 0x10000) ||
+        (render_rect.height() > view_rect.height() * 3 && render_rect.height() > 0x10000)) {
         qDebug("request clear image l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
                view_rect.right(), view_rect.bottom(), size().width(), size().height());
         emit render_bkimg(bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
@@ -126,6 +155,45 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
         if (scale>min_scale)
             scale = scale /2;
         break;
+    case Qt::Key_0:
+        bk_layer = 0;
+        break;
+    case Qt::Key_1:
+        if (gcst.num_layer() > 1)
+            bk_layer = 1;
+        break;
+    case Qt::Key_2:
+        if (gcst.num_layer() > 2)
+            bk_layer = 2;
+        break;
+    case Qt::Key_3:
+        if (gcst.num_layer() > 3)
+            bk_layer = 3;
+        break;
+    case Qt::Key_4:
+        if (gcst.num_layer() > 4)
+            bk_layer = 4;
+        break;
+    case Qt::Key_5:
+        if (gcst.num_layer() > 5)
+            bk_layer = 5;
+        break;
+    case Qt::Key_6:
+        if (gcst.num_layer() > 6)
+            bk_layer = 6;
+        break;
+    case Qt::Key_7:
+        if (gcst.num_layer() > 7)
+            bk_layer = 7;
+        break;
+    case Qt::Key_8:
+        if (gcst.num_layer() > 8)
+            bk_layer = 8;
+        break;
+    case Qt::Key_9:
+        if (gcst.num_layer() > 9)
+            bk_layer = 9;
+        break;
     default:
         QWidget::keyPressEvent(e);
         return;
@@ -134,6 +202,21 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
     qDebug("Key press, s=%5.2f, center=(%d,%d)", scale, center.x(), center.y());
 
     update();
+}
+
+void ConnectView::load_objects(string file_name)
+{
+    if (odb.load_objets(file_name) !=0)
+        QMessageBox::about(this, "Load failed", "Please check file text");
+    else
+        update();
+}
+
+void ConnectView::mouseMoveEvent(QMouseEvent *event)
+{
+    QPoint mouse = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    char s[200];
+    emit mouse_change(mouse, QString(s));
 }
 
 void ConnectView::server_connected()
@@ -180,12 +263,21 @@ void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
     QMessageBox::about(this, "Extract done", "Extract done");
 }
 
+void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
+{
+    for (int i = 0; i < prst->objs.size(); i++) {
+        ElementObj obj(prst->objs[i]);
+        odb.add_object(obj);
+    }
+    QMessageBox::about(this, "Extract done", "Extract done");
+}
+
 void ConnectView::train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3)
 {
     if (cell_train) {
         qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
-        QPoint p0(295936, 236864), p1(304768, 241088);
-        emit train_cell(0, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+        QPoint p0(1551572, 255590), p1(1565716, 259494);
+        emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
     }    
 }
 
@@ -195,7 +287,20 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         SearchRects * sr = new SearchRects;
         sr->dir.push_back(POWER_UP | POWER_DOWN);
-        sr->rects.push_back(QRect(163840, 163840, 163840, 163840));
-        emit extract_cell(0, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+        sr->rects.push_back(QRect(1300000, 200000, 500000, 500000));
+        emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+    } else {
+        qInfo("Accept wire extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
+        VWSearchRequest * preq = new VWSearchRequest;
+        preq->lpa.push_back(LayerParam(2, 10, 9,
+            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
+            16, 0.5, 0.5, 2));
+        preq->lpa.push_back(LayerParam(3, 12, 10,
+            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
+            16, 0.5, 0.5, 2));
+        preq->lpa.push_back(LayerParam(4, 12, 10,
+            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
+            16, 0.5, 0.5, 2));
+        emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 586000, 65536, 65536));
     }
 }

@@ -46,9 +46,11 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 					obj.p0 = QPoint(pa->loc[0].x0, pa->loc[0].y0);
 					obj.p1 = QPoint(pa->loc[0].x1, pa->loc[0].y1);
 					objs.push_back(obj);
-                    qInfo("start cell train dir=%x, (%d,%d)_(%d,%d)", obj.type3,
+                    qInfo("start cell train l=%d, dir=%x, (%d,%d)_(%d,%d)", (int) layer[i], obj.type3,
                           obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y());
-					ce[layer[i]]->train(bk_img->get_layer(layer[i]), objs);
+                    vector<ICLayerWr *> pic;
+                    pic.push_back(bk_img->get_layer(layer[i]));
+                    ce[layer[i]]->train(pic, objs);
 					break;
 				}
             RspSearchPkt rsp_pkt;
@@ -83,7 +85,9 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 						areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
 						pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
 					vector<MarkObj> objs;
-					ce[layer[i]]->extract(bk_img->get_layer(layer[i]), areas, objs);
+                    vector<ICLayerWr *> pic;
+                    pic.push_back(bk_img->get_layer(layer[i]));
+                    ce[layer[i]]->extract(pic, areas, objs);
 					//send response
 					unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
 					RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
@@ -97,9 +101,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 						ploc[j].x1 = objs[j].p1.x();
 						ploc[j].y1 = objs[j].p1.y();
 						ploc[j].opt = objs[j].type3;
-                        ploc[j].prob = objs[j].prob;
-                        qInfo("cell extract dir=%x, (%d,%d)_(%d,%d), p=%f", ploc[j].opt,
-                              ploc[j].x0, ploc[j].y0, ploc[j].x1, ploc[j].y1, ploc[j].prob);
+                        ploc[j].prob = objs[j].prob;                        
 					}
 					rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
 						RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
@@ -112,22 +114,85 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
     rak_peer->DeallocatePacket(packet);
 }
 
+VWExtractService::VWExtractService(QObject *parent) : QObject(parent)
+{
+    vwe = VWExtract::create_extract(0);
+}
+
+void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * p)
+{
+    BkImgDB * bk_img = (BkImgDB *) bk_img_;
+    RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
+    RakNet::Packet *packet = (RakNet::Packet *) p;
+    ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
+
+    switch (req_pkt->command) {
+    case VW_EXTRACT:
+        if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
+            qCritical("receive cell extract req length error!");
+        else {
+            ReqSearchParam * pa = &(req_pkt->params[0]);
+            vector<ICLayerWr *> pic;
+            for (int l=0; l<req_pkt->req_search_num; l++) {
+                vwe->set_extract_param(l, pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],
+                         pa[l].parami[4], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], 0);
+                pic.push_back(bk_img->get_layer(pa[l].parami[0]));
+                qInfo("extract l=%d, wd=%d, vr=%d, rule=%x, gd=%d, p1=%f, p2=%f, p3=%f",
+                      pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],pa[l].parami[4],
+                      pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2]);
+            }
+            vector<SearchArea> search;
+            QRect rect(QPoint(pa[0].loc[0].x0, pa[0].loc[0].y0), QPoint(pa[0].loc[0].x1, pa[0].loc[0].y1));
+            search.push_back(SearchArea(rect, 0));
+            vector<MarkObj> objs;
+            qInfo("Receive wire&via search request (%d,%d)_(%d,%d)", rect.left(),
+                  rect.top(), rect.right(), rect.bottom());
+            vwe->extract(pic, search, objs);
+            //send response
+            unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
+            RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
+            rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
+            rsp_pkt->command = VW_EXTRACT;
+            rsp_pkt->rsp_search_num = objs.size();
+            Location * ploc = &(rsp_pkt->result[0]);
+            for (unsigned j = 0; j < objs.size(); j++) {
+                ploc[j].x0 = objs[j].p0.x();
+                ploc[j].y0 = objs[j].p0.y();
+                ploc[j].x1 = objs[j].p1.x();
+                ploc[j].y1 = objs[j].p1.y();
+                unsigned short t = objs[j].type;
+                ploc[j].opt = t << 8 | objs[j].type3;
+                ploc[j].prob = objs[j].prob;
+            }
+            rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
+                RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
+            free(rsp_pkt);
+        }
+        break;
+    }
+    rak_peer->DeallocatePacket(packet);
+}
+
 ServerPerClient::ServerPerClient(QObject *parent) : QObject(parent)
 {
     bk_img = NULL;
-    ce_thread = new QThread;
+    ano_thread = new QThread;
     ce_service = new CellExtractService;
+    vw_service = new VWExtractService;
     connect(this, SIGNAL(cell_extract_req(void *, void *, void *)), 
 		ce_service, SLOT(cell_extract_req(void *, void *, void *)));
-    ce_service->moveToThread(ce_thread);
-    ce_thread->start();
+    connect(this, SIGNAL(vw_extract_req(void*,void*,void*)),
+            vw_service, SLOT(vw_extract_req(void *, void *, void *)));
+    ce_service->moveToThread(ano_thread);
+    vw_service->moveToThread(ano_thread);
+    ano_thread->start();
 }
 
 ServerPerClient::~ServerPerClient()
 {
     ce_service->deleteLater();
-    ce_thread->quit();
-    delete ce_thread;
+    ano_thread->quit();
+    delete ano_thread;
 }
 
 void ServerPerClient::prepare(BkImgDB * bk_img_, RakNet::SystemAddress cli_addr_)
@@ -196,6 +261,9 @@ void ServerPerClient::handle_client_req(void * p)
         case CELL_EXTRACT:
             qInfo("Receive request cell %s", packet->data[1]==CELL_TRAIN ? "train" : "extract");
             emit cell_extract_req((void*) &cli_addr, (void*) bk_img, (void*) packet);
+            break;
+        case VW_EXTRACT:
+            emit vw_extract_req((void*) &cli_addr, (void*) bk_img, (void*) packet);
             break;
         }
         break;

@@ -18,7 +18,10 @@ int cal_bins(Mat &img, QRect rect, vector<unsigned> &bins, int step=1)
     return total;
 }
 
-void cal_threshold(vector<unsigned> bins, unsigned init_num, vector<unsigned> & th)
+/*
+Use 2 julei
+*/
+static void cal_threshold(vector<unsigned> bins, unsigned init_num, vector<unsigned> & th)
 {
     unsigned total1=0, sep, total2, old_sep=0xffffffff;
     for (sep = 0; sep < bins.size(); sep++) {
@@ -45,6 +48,7 @@ void cal_threshold(vector<unsigned> bins, unsigned init_num, vector<unsigned> & 
         m1_r = m1_r / total2;
         sep = (m1_l + m1_r) / 2;
     }
+	th.clear();
     th.push_back(m1_l*0.6 + m1_r*0.4);
     th.push_back(sep);
     th.push_back(m1_l*0.4 + m1_r*0.6);
@@ -67,29 +71,23 @@ int CellFeature::cmp_vector(const vector<int> & tn0, const vector<int> & tn1, in
     CV_Assert(tn0.size() == tn1.size());
     mmax = -1; submax = -1;
 
-#define CONJ(a, b) (b % gw!=0 && b==a+1 || b==a+gw)
+#define CONJ(a, b) (b % gw!=0 && b==a+1 || b % gw != gw-1 && a==b+1 || b==a+gw || a==b+gw)
+	for (int i = 0; i < tn0.size(); i++) {
+		int d = abs(tn0[i] - tn1[i]);
+		diff += d;
+		if (d > mmax) {
+			mmax = d;
+			im = i;
+		}
+	}
 
-    for (int i = 0; i < tn0.size(); i++) {
-        int d = abs(tn0[i] - tn1[i]);
-        diff += d;
-        if (d > mmax) {
-            if (CONJ(im, i)) {
-                mmax = d;
-                im = i;
-            }
-            else {
-                submax = mmax;
-                ism = im;
-                mmax = d;
-                im = i;
-            }
-        }
-        else
-            if (d > submax && !CONJ(im, i)) {
-                submax = d;
-                ism = i;
-            }
-    }
+	for (int i = 0; i < tn0.size(); i++) {
+		int d = abs(tn0[i] - tn1[i]);
+		if (d > submax && !CONJ(im, i)) {
+			submax = d;
+			ism = i;
+		}
+	}
 
     int conj_m = 0;
     if (im % gw != 0)
@@ -152,6 +150,20 @@ void CellFeature::cal_feature(int * ig, int lsize, int _width, int _height, int 
     for (int i = 0; i < 8; i++)
         tn[i].resize((height / hunit) * (width / wunit));
     int d0, d1, d2, d3, d4, d5, d6, d7;
+	/*
+	0: 0 1 2 		4: 0 1
+	   3 4 5		   2 3
+					   4 5
+	1: 2 1 0		5: 4 5
+	   5 4 3		   2 3
+					   0 1
+	2: 3 4 5		6: 1 0
+	   0 1 2		   3 2
+					   5 4
+	3: 5 4 3		7: 5 4
+	   2 1 0		   3 2
+					   1 0
+	*/
     switch (dir) {
     case POWER_UP_L:
         d0 = 0; d1 = 1; d2 = 2; d3 = 3;
@@ -308,7 +320,7 @@ float CellFeature::cmp(int *ig, int lsize, int & dir, float & m_score)
         }
     }
 
-    int min_d = 100000000, max_score, dbit=0;
+    int min_d = 100000000, max_score=0, dbit=0;
     for (int i = 0; i < 8; i++)
         if ((dir >>i) & 1) {
             int m;
@@ -429,7 +441,7 @@ int CellExtract::extract(string file_name, QRect rect, vector<MarkObj> & obj_set
                                 break;
                             }
                 if (is_mmin) {
-                    int my, mx;
+                    int my=0, mx=0;
                     float mmin = 100000;
                     for (int dy = -stepy; dy <= stepy; dy++)
                         for (int dx = -stepx; dx <= stepx; dx++)
@@ -470,27 +482,8 @@ int CellExtract::extract(string file_name, QRect rect, vector<MarkObj> & obj_set
 
 typedef unsigned long long MapID;
 
-static MapID sxy2mapid(unsigned char layer, unsigned char scale, unsigned short x, unsigned short y) {
-    MapID ret;
-    ret = layer;
-    ret = ret << 8;
-    ret |= scale;
-    ret = ret << 16;
-    ret |= x;
-    ret = ret << 16;
-    ret |= y;
-    return ret;
-}
 
-static void mapid2sxy(MapID m, unsigned char &layer, unsigned char & scale, unsigned short & x, unsigned short &y)
-{
-    layer = (m >> 40) & 0xff;
-    scale = (m >> 32) & 0xff;
-    x = (m >> 16) & 0xffff;
-    y = m & 0xffff;
-}
-
-int CellExtract::train(ICLayerWr *ic_layer, const std::vector<MarkObj> & obj_sets)
+int CellExtract::train(vector<ICLayerWr *> & ic_layer, const std::vector<MarkObj> & obj_sets)
 {
     vector<unsigned> bins, th;
     Mat mark, img;
@@ -504,15 +497,19 @@ int CellExtract::train(ICLayerWr *ic_layer, const std::vector<MarkObj> & obj_set
                 return -1;
             }
             QRect rect(obj_sets[i].p0, obj_sets[i].p1);
-            int scale = 32768 / ic_layer->getBlockWidth();
+            int scale = 32768 / ic_layer[0]->getBlockWidth();
+			if (rect.height() / scale <= FEATURE0_SIZE * 3 || rect.width() / scale <= FEATURE0_SIZE * 3) {
+				qCritical("cell size (%d, %d) is small!", rect.height() / scale, rect.width() / scale);
+				return -1;
+			}
             img.create(rect.height() / scale, rect.width() / scale, CV_8UC1);
             for (int yy = rect.y() >> 15; yy <= (rect.y() + rect.height()) >> 15; yy++)
                 for (int xx = rect.x() >> 15; xx <= (rect.x() + rect.width()) >> 15; xx++) {
                     vector<uchar> encode_img;
-                    if (ic_layer->getRawImgByIdx(encode_img, xx, yy, 0, 0) != 0)
+                    if (ic_layer[0]->getRawImgByIdx(encode_img, xx, yy, 0, 0) != 0)
                         return -2;
                     Mat image = imdecode(Mat(encode_img), 0);
-                    CV_Assert(ic_layer->getBlockWidth() == image.cols && image.cols == image.rows);
+                    CV_Assert(ic_layer[0]->getBlockWidth() == image.cols && image.cols == image.rows);
                     int total = cal_bins(image, QRect(0, 0, image.cols, image.rows), bins, 3);
                     cal_threshold(bins, total / 2, th);
                     threshold(image, mark, th[1], 1, THRESH_BINARY);
@@ -570,21 +567,28 @@ struct SearchResult {
     }
 };
 
-int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets)
+int CellExtract::extract(vector<ICLayerWr *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets)
 {
+	if (cell.empty()) {
+		qCritical("Cell must be traininged before extract");
+		return -1;
+	}
     list<SearchArea> area;
-    int scale = 32768 / ic_layer->getBlockWidth();
+    int scale = 32768 / ic_layer[0]->getBlockWidth();
     int block_x, block_y;
-    ic_layer->getBlockNum(block_x, block_y);
+    ic_layer[0]->getBlockNum(block_x, block_y);
     int chigh = cell[0].feature[0].height;
     int cwide = cell[0].feature[0].width;
     int stepy = 2;
     int stepx = 3;
     obj_sets.clear();
 
-    qInfo("Allow total similar > %f, block similar < %f", 1 - param1, param2);
+	//1 Do some check and sort area
+    qInfo("Allow total similar th=%f, block similar th=%f, s", 1 - param1, param2);
     if (area_[0].option & (POWER_UP | POWER_DOWN)) {
         for (int i = 0; i < area_.size(); i++) {
+            qInfo("Receive search rect(%d,%d) (%d,%d)", area_[i].rect.left(), area_[i].rect.top(),
+                  area_[i].rect.right(), area_[i].rect.bottom());
             if (area_[i].rect.width() < cwide * scale || area_[i].rect.height() < chigh *scale)
                 qWarning("Rect(%d,%d) can't contain object (%d,%d)", area_[i].rect.width(), area_[i].rect.height(),
                 cwide, chigh);
@@ -599,6 +603,8 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
     }
     else {
         for (int i = 0; i < area_.size(); i++) {
+            qInfo("Receive search rect(%d,%d) (%d,%d)", area_[i].rect.left(), area_[i].rect.top(),
+                  area_[i].rect.right(), area_[i].rect.bottom());
             if (area_[i].rect.width() < chigh * scale || area_[i].rect.height() < cwide * scale)
                 qWarning("Rect(%d,%d) can't contain object (%d,%d)", area_[i].rect.width(), area_[i].rect.height(),
                     chigh, cwide);
@@ -621,13 +627,11 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
         nsech.clear();
         result.clear();
         QRect cr = area.front().rect;
-        QRect srect(area.front().rect.x() / scale, area.front().rect.y() / scale,
-            area.front().rect.width() / scale - cwide + 1,
-            area.front().rect.height() / scale - chigh + 1);
+        QRect srect(cr.x() / scale, cr.y() / scale, cr.width() / scale - cwide + 1, cr.height() / scale - chigh + 1);
         nsech.push_back(SearchArea(srect, area.front().option));
         area.pop_front();
 
-        //merge search area and select new search area
+        //2 merge search area and select new search area
 #define OCCUPY(r) (((r.right() >>15) - (r.x() >>15) + 1) * ((r.bottom() >>15) - (r.y() >> 15) + 1))
         for (int i = 0; i < 2; i++)
         for (list<SearchArea>::iterator pa = area.begin(); pa != area.end();) {
@@ -647,20 +651,20 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
                 pa++;
         }
 
-        //prepare initial ig
+        //Search from left to right, prepare initial ig
         int fb_y = (cr.bottom() >> 15) - (cr.y() >> 15) + 1;
-        int fb_x = min(cell[0].feature[0].width / ic_layer->getBlockWidth() + 2,
+        int fb_x = min(cell[0].feature[0].width / ic_layer[0]->getBlockWidth() + 2,
             (cr.right() >> 15) - (cr.x() >> 15) +1);
-        Mat img(fb_y * ic_layer->getBlockWidth(), fb_x * ic_layer->getBlockWidth(), CV_8UC1);
+        Mat img(fb_y * ic_layer[0]->getBlockWidth(), fb_x * ic_layer[0]->getBlockWidth(), CV_8UC1);
         Mat mark;
         qDebug("load image, img(%d,%d),(w=%d,h=%d)", cr.y() >> 15, cr.x() >> 15, fb_x, fb_y);
-        for (int yy = cr.y() >> 15, y = 0; yy < (cr.y() >> 15) + fb_y; yy++, y += ic_layer->getBlockWidth())
-            for (int xx = cr.x() >> 15, x = 0; xx < (cr.x() >> 15) + fb_x; xx++, x += ic_layer->getBlockWidth()) {
+        for (int yy = cr.y() >> 15, y = 0; yy < (cr.y() >> 15) + fb_y; yy++, y += ic_layer[0]->getBlockWidth())
+            for (int xx = cr.x() >> 15, x = 0; xx < (cr.x() >> 15) + fb_x; xx++, x += ic_layer[0]->getBlockWidth()) {
                 vector<uchar> encode_img;
-                if (ic_layer->getRawImgByIdx(encode_img, xx, yy, 0, 0) != 0)
+                if (ic_layer[0]->getRawImgByIdx(encode_img, xx, yy, 0, 0) != 0)
                     return -2;
                 Mat image = imdecode(Mat(encode_img), 0);
-                CV_Assert(ic_layer->getBlockWidth() == image.cols && image.cols == image.rows);
+                CV_Assert(ic_layer[0]->getBlockWidth() == image.cols && image.cols == image.rows);
                 int total = cal_bins(image, QRect(0, 0, image.cols, image.rows), bins, 3);
                 cal_threshold(bins, total / 2, th);
                 threshold(image, mark, th[1], 1, THRESH_BINARY);
@@ -669,16 +673,16 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
             }
         Mat ig;
         integral(img, ig, CV_32S);
-        img.create(fb_y * ic_layer->getBlockWidth(), ic_layer->getBlockWidth(), CV_8UC1);
+        img.create(fb_y * ic_layer[0]->getBlockWidth(), ic_layer[0]->getBlockWidth(), CV_8UC1);
 
         for (int xx = cr.x() >> 15; xx <= cr.right() >> 15; xx++) {
             qDebug("search image, img(%d,%d),(w=%d,h=%d)", cr.y() >> 15, xx, 1, fb_y);
-            QRect rr(xx*ic_layer->getBlockWidth(), (cr.y() >> 15) * ic_layer->getBlockWidth(),
-                ic_layer->getBlockWidth(), fb_y * ic_layer->getBlockWidth());
+            QRect rr(xx*ic_layer[0]->getBlockWidth(), (cr.y() >> 15) * ic_layer[0]->getBlockWidth(),
+                ic_layer[0]->getBlockWidth(), fb_y * ic_layer[0]->getBlockWidth());
 
             //search current ig
             for (int i = 0; i < nsech.size(); i++) {
-                QRect ir = rr.intersected(nsech[i].rect);
+                QRect ir = rr.intersected(nsech[i].rect); //ir is search rect
                 for (int y = ir.y(); y < ir.y() + ir.height(); y+=stepy) {
                     int iy = y - rr.top();
                     for (int x = ir.x(); x < ir.x() + ir.width(); x+=stepx) {
@@ -696,7 +700,7 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
                         diff = cell[0].feature[0].cmp(ig.ptr<int>(iy)+ix, ig.cols, dir, m);
                         if (diff < param1 * 1.1f && m < param2 * 1.1f) {
                             //fine search
-                            int my, mx;
+                            int my=0, mx=0;
                             float mmin = 100000;
                             for (int dy = 0; dy < stepy; dy++)
                                 for (int dx = 0; dx < stepx; dx++)
@@ -722,19 +726,19 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
             //Shift ig left
             for (int y = 0; y < ig.rows; y++) {
                 int * p_ig = ig.ptr<int>(y);
-                for (int x = ic_layer->getBlockWidth(); x < ig.cols; x++)
-                    p_ig[x - ic_layer->getBlockWidth()] = p_ig[x];
+                for (int x = ic_layer[0]->getBlockWidth(); x < ig.cols; x++)
+                    p_ig[x - ic_layer[0]->getBlockWidth()] = p_ig[x];
             }
 
             //fill new ig
             if (xx + fb_x <= cr.right() >> 15) {
                 qDebug("load image, img(%d,%d),(w=%d,h=%d)", cr.y() >> 15, xx + fb_x, 1, fb_y);
-                for (int yy = cr.y() >> 15, y = 0; yy < (cr.y() >> 15) + fb_y; yy++, y += ic_layer->getBlockWidth()) {
+                for (int yy = cr.y() >> 15, y = 0; yy < (cr.y() >> 15) + fb_y; yy++, y += ic_layer[0]->getBlockWidth()) {
                     vector<uchar> encode_img;
-                    if (ic_layer->getRawImgByIdx(encode_img, xx + fb_x, yy, 0, 0)!=0)
+                    if (ic_layer[0]->getRawImgByIdx(encode_img, xx + fb_x, yy, 0, 0)!=0)
                         return -2;
                     Mat image = imdecode(Mat(encode_img), 0);
-                    CV_Assert(ic_layer->getBlockWidth() == image.cols && image.cols == image.rows);
+                    CV_Assert(ic_layer[0]->getBlockWidth() == image.cols && image.cols == image.rows);
                     int total = cal_bins(image, QRect(0, 0, image.cols, image.rows), bins, 3);
                     cal_threshold(bins, total / 2, th);
                     threshold(image, mark, th[1], 1, THRESH_BINARY);
@@ -745,7 +749,7 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
                 for (int y = 0; y < ig.rows; y++) {
                     int * p_ig = ig.ptr<int>(y);
                     int * p_ign = ign.ptr<int>(y);
-                    int x0 = ig.cols - ic_layer->getBlockWidth();
+                    int x0 = ig.cols - ic_layer[0]->getBlockWidth();
                     for (int x = x0, xn = 1; x < ig.cols; x++, xn++)
                         p_ig[x] = p_ign[xn] + p_ig[x0 - 1];
                 }
@@ -772,8 +776,8 @@ int CellExtract::extract(ICLayerWr * ic_layer, const vector<SearchArea> & area_,
             new_cell.prob = pr->diff;
             obj_sets.push_back(new_cell);
             qDebug("Find new, img(%d,%d) (x=%d,y=%d) dir=%d, d=%f",
-                pr->y / ic_layer->getBlockWidth(), pr->x / ic_layer->getBlockWidth(),
-                pr->x % ic_layer->getBlockWidth(), pr->y %ic_layer->getBlockWidth(), pr->dir, pr->diff);
+                pr->y / ic_layer[0]->getBlockWidth(), pr->x / ic_layer[0]->getBlockWidth(),
+                pr->x % ic_layer[0]->getBlockWidth(), pr->y %ic_layer[0]->getBlockWidth(), pr->dir, pr->diff);
         }
     }
     return 0;

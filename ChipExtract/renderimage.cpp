@@ -18,7 +18,7 @@ const int max_load_packet_sent = 6;
 const int max_preload_packet_sent = 8;
 const int scale_score[] = {81, 27, 9, 3, 1}; //each scale score
 const int max_score_init = 190; //total packet score can't exceed max_score_init
-const int cache_size[] = {10, 20, 50, 120, 280};
+const int cache_size[] = {30, 60, 150, 300, 700};
 extern RakNet::RakPeerInterface *rak_peer;
 extern RakNet::SystemAddress server_addr;
 extern GlobalConst gcst;
@@ -29,7 +29,7 @@ RenderImage::RenderImage(QObject *parent) : QObject(parent)
     connect_to_server =false;
     max_score = max_score_init;
     req_score = 0;
-    for (char s=0; s<IMAGE_MAX_SCALE; s++) {
+    for (int s=0; s<IMAGE_MAX_SCALE; s++) {
         for (int i=0; i<cache_size[s]; i++)
             cache_list[s].push_back(INVALID_MAP_ID);
     }
@@ -92,7 +92,7 @@ void RenderImage::render_bkimg(const unsigned char layer, const QRect rect,
                 continue;
             MapID id;
             map<MapID, Bkimg>::iterator pmap;
-            char s;
+            int s;
             for (s = scale; s>=0; s--) { //check if we have clear cache image
                 id = sxy2mapid(layer, s, x, y);
                 pmap =cache_map.find(id);
@@ -572,7 +572,7 @@ void RenderImage::timerEvent( QTimerEvent *event)
 {
     switch (self_test) {
     case 1:
-        for (char s=0; s<IMAGE_MAX_SCALE; s++) {
+        for (int s=0; s<IMAGE_MAX_SCALE; s++) {
             if (cache_list[s].size() != cache_size[s])
                 qCritical("Selftest error cache_list[%d] size=%d", s, cache_list[s].size());
         }
@@ -581,7 +581,7 @@ void RenderImage::timerEvent( QTimerEvent *event)
     case 2:
         for (map<MapID, Bkimg>::iterator it=cache_map.begin(); it!=cache_map.end(); it++) {
             if (*(it->second.plist) != it->first)
-                qCritical("Selftest error cache_map[%d]!=%d", it->first, it->second.plist);
+                qCritical("Selftest error cache_map[%lld]!=%lld", it->first, *(it->second.plist));
         }
         self_test++;
         break;

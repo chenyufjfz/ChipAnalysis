@@ -7,6 +7,7 @@
 #include <QThread>
 #include "RakPeerInterface.h"
 #include "cellextract.h"
+#include "vwextract.h"
 using namespace std;
 
 class BkImgDB {
@@ -25,7 +26,7 @@ public:
     }
 
     ~BkImgDB() {
-        for (int i=0; i<bk_img_layers.size(); i++)
+        for (unsigned i=0; i<bk_img_layers.size(); i++)
             delete bk_img_layers[i];
     }
 };
@@ -43,14 +44,27 @@ public slots:
 	void cell_extract_req(void * p_cli_addr, void * bk_img_, void * p);
 };
 
+class VWExtractService : public QObject {
+    Q_OBJECT
+protected:
+    VWExtract * vwe;
+
+public:
+    VWExtractService(QObject *parent = 0);
+
+public slots:
+    void vw_extract_req(void * p_cli_addr, void * bk_img_, void * p);
+};
+
 class ServerPerClient : public QObject
 {
     Q_OBJECT
 protected:
     BkImgDB * bk_img;
     RakNet::SystemAddress cli_addr;
-    QThread * ce_thread;
+    QThread * ano_thread;
     CellExtractService * ce_service;
+    VWExtractService * vw_service;
 
 public:
     explicit ServerPerClient(QObject *parent = 0);
@@ -59,6 +73,7 @@ public:
 
 signals:
 	void cell_extract_req(void * p_cli_addr, void * bk_img, void * p);
+    void vw_extract_req(void * p_cli_addr, void * bk_img_, void * p);
 
 protected:
     void req_bk_img(unsigned char layer, unsigned char scale,

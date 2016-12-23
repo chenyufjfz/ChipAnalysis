@@ -36,8 +36,18 @@ void ServerThread::run()
     rak_peer->SetMaximumIncomingConnections(max_user);
     rak_peer->SetPerConnectionOutgoingBandwidthLimit(10000000);
     last_printtime = RakNet::GetTimeMS();
-#if 1
-    imgdb.add_new_layer("../../M6.dat");
+#ifndef WIN64
+    imgdb.add_new_layer("../../PL.dat");
+    imgdb.add_new_layer("../../M1.dat");
+    imgdb.add_new_layer("../../M2.dat");
+    imgdb.add_new_layer("../../M3.dat");
+    imgdb.add_new_layer("../../M4.dat");
+#else
+    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/PL.dat");
+    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M1.dat");
+    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M2.dat");
+    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M3.dat");
+    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M4.dat");
 #endif
     while (!finish)
     {
@@ -55,8 +65,10 @@ void ServerThread::run()
             {
             case ID_NEW_INCOMING_CONNECTION:
                 qInfo("Another client %s is connected.", packet->systemAddress.ToString());
-                if (server != NULL)
+                if (server != NULL) {
                     qWarning("Raknet internal error, new connect already have server");
+                    delete server;
+                }
                 server = new ServerPerClient;
                 server_pools[packet->guid.g] = server;
                 break;

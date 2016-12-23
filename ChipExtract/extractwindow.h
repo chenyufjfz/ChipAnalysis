@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QThread>
+#include <QLabel>
 #include "renderimage.h"
 #include "connectview.h"
 #include "paramdialog.h"
@@ -22,11 +23,14 @@ public:
 
 private slots:
     void on_actionTrain_triggered();
-
     void on_actionExtract_triggered();
+    void mouse_change(QPoint pos, QString msg);
+
+    void on_actionLoad_Objects_triggered();
 
 private:
     ParamDialog param_dlg;
+    QLabel *status_label;
     QThread * render_thread;
     RenderImage * render_image;
     SearchObject * search_object;

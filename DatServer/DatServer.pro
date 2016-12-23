@@ -8,10 +8,19 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
-Release:TARGET = DatServer
-Debug:TARGET = DatServerd
-TEMPLATE = app
 LIBS += -L$$_PRO_FILE_PWD_/../lib
+
+CONFIG(debug, debug|release) {
+TARGET = DatServerd
+LIBS += -L$$_PRO_FILE_PWD_/../lib/debug -lVWExtractd
+INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/debug/
+} else {
+TARGET = DatServer
+LIBS += -L$$_PRO_FILE_PWD_/../lib/release -lVWExtract
+INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/release/
+}
+
+TEMPLATE = app
 LIBS += -lRaknet -lMdb
 INCLUDEPATH += ../Raknet/Include ../Mdb
 DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
@@ -31,15 +40,11 @@ HEADERS  += serverwindow.h \
     serverperclient.h \
     cellextract.h \
     objextract.h \
-    markobj.h
+    markobj.h \
+    vwextract.h
 
 FORMS    += serverwindow.ui
 DESTDIR = $$_PRO_FILE_PWD_/../app
-
-Release:LIBS += -L$$_PRO_FILE_PWD_/../lib/release
-Release:INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/release/
-Debug:LIBS += -L$$_PRO_FILE_PWD_/../lib/debug
-Debug:INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/debug/
 
 win32 {
 Release:LIBS += -lopencv_calib3d249 -lopencv_contrib249 -lopencv_core249 -lopencv_features2d249 -lopencv_flann249
@@ -56,7 +61,7 @@ Debug:LIBS += -lopencv_ts249d -lopencv_video249d -lopencv_videostab249d
 unix {
 LIBS += -lopencv_contrib -lopencv_stitching -lopencv_nonfree -lopencv_superres -lopencv_ocl -lopencv_ts
 LIBS += -lopencv_videostab -lopencv_gpu -lopencv_photo -lopencv_objdetect -lopencv_legacy -lopencv_video
-LIBS += -lopencv_ml -lopencv_calib3d -lopencv_features2d -lopencv_highgui $$_PRO_FILE_PWD_/../cvinclude/libIlmImf.a -llibjasper
+LIBS += -lopencv_ml -lopencv_calib3d -lopencv_features2d -lopencv_highgui -lIlmImf -llibjasper
 LIBS += -llibtiff -llibpng -llibjpeg -lopencv_imgproc -lopencv_flann -lopencv_core -lzlib
 LIBS += -lswscale-ffmpeg -lavutil-ffmpeg -lavformat-ffmpeg -lavcodec-ffmpeg -ldc1394 -lgstvideo-0.10
 LIBS += -lgstapp-0.10 -lxml2 -lgmodule-2.0 -lgstreamer-0.10 -lgstbase-0.10 -lgthread-2.0 -lfreetype -lfontconfig

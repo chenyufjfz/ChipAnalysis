@@ -73,7 +73,7 @@ void SearchObject::extract_cell(unsigned char l0, unsigned char l1, unsigned cha
      req_pkt->params[0].paramf[1] = param2;
      req_pkt->params[0].paramf[2] = param3;
 
-     for (int i=0; i<prect->rects.size(); i++) {
+     for (int i=0; i < (int) prect->rects.size(); i++) {
          req_pkt->params[0].loc[i].opt = prect->dir[i];
          req_pkt->params[0].loc[i].x0 = prect->rects[i].left();
          req_pkt->params[0].loc[i].y0 = prect->rects[i].top();
@@ -87,6 +87,36 @@ void SearchObject::extract_cell(unsigned char l0, unsigned char l1, unsigned cha
      rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
                     RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
      free(req_pkt);
+}
+
+void SearchObject::extract_wire_via(QSharedPointer<VWSearchRequest> preq, const QRect rect)
+{
+    unsigned req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * preq->lpa.size();
+    ReqSearchPkt * req_pkt = (ReqSearchPkt * ) malloc(req_len);
+    req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+    req_pkt->command = VW_EXTRACT;
+    req_pkt->req_search_num = preq->lpa.size();
+    ReqSearchParam * pa = &(req_pkt->params[0]);
+    pa[0].loc[0].x0 = rect.left();
+    pa[0].loc[0].y0 = rect.top();
+    pa[0].loc[0].x1 = rect.right();
+    pa[0].loc[0].y1 = rect.bottom();
+    for (int l=0; l<preq->lpa.size(); l++) {
+        pa[l].parami[0] = preq->lpa[l].layer;
+        pa[l].parami[1] = preq->lpa[l].wire_wd;
+        pa[l].parami[2] = preq->lpa[l].via_rd;
+        pa[l].parami[3] = preq->lpa[l].rule & 0xffffffff;
+        pa[l].parami[4] = preq->lpa[l].grid_wd;
+        pa[l].paramf[0] = preq->lpa[l].param1;
+        pa[l].paramf[1] = preq->lpa[l].param2;
+        pa[l].paramf[2] = preq->lpa[l].param3;
+        qInfo("extract l=%d, wd=%d, vr=%d, gd=%d, rule=%x, p1=%f, p2=%f, p3=%f",
+              pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],
+              pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2]);
+    }
+    rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
+                   RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
+    free(req_pkt);
 }
 
 void SearchObject::search_packet_arrive(void * p)
@@ -117,12 +147,31 @@ void SearchObject::search_packet_arrive(void * p)
                   obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y(),
                   obj.type3, obj.prob);
         }
+        emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
     case CELL_TRAIN:
+        emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
+        break;
+    case VW_EXTRACT:
+        for (unsigned i = 0; i < rsp_pkt->rsp_search_num; i++) {
+            MarkObj obj;
+            unsigned short t = rsp_pkt->result[i].opt;
+            obj.type = t >> 8;
+            obj.type3 = t & 0xff;
+            obj.type2 = (obj.type == OBJ_LINE) ? LINE_WIRE_AUTO_EXTRACT : POINT_VIA_AUTO_EXTRACT;
+            obj.state = 0;
+            obj.prob = rsp_pkt->result[i].prob;
+            obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);
+            obj.p1 = QPoint(rsp_pkt->result[i].x1, rsp_pkt->result[i].y1);
+            prst->objs.push_back(obj);
+            qInfo("extract l=%d, (%d,%d)_(%d,%d)  p=%f", obj.type3,
+                  obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y(), obj.prob);
+        }
+        emit extract_wire_via_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
     default:
         qCritical("Response command error %d!", rsp_pkt->command);
     }
-    emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
+
     rak_peer->DeallocatePacket(packet);
 }
