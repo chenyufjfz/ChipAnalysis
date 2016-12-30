@@ -42,7 +42,7 @@ void ServerThread::run()
     imgdb.add_new_layer("../../M2.dat");
     imgdb.add_new_layer("../../M3.dat");
     imgdb.add_new_layer("../../M4.dat");
-#else
+#else    
     imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/PL.dat");
     imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M1.dat");
     imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M2.dat");

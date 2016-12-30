@@ -43,6 +43,15 @@ void AreaObjLink::delink_object(ElementObj * pobj)
 
 }
 
+void AreaObjLink::clear_all()
+{
+    for (int i=0; i<(int) objs.size(); i++)
+        delete objs[i];
+    objs.clear();
+    for (int i=0; i<(int) areas.size(); i++)
+        areas[i]->clear_all();
+}
+
 ObjectDB::ObjectDB()
 {
     for (unsigned i = 0; i < (int) sizeof(layer_wire_info) / sizeof(layer_wire_info[0]); i++)
@@ -168,6 +177,24 @@ void ObjectDB::del_object(ElementObj * p_obj)
 	delete p_obj;
 }
 
+void ObjectDB::clear_all()
+{
+    root_area->clear_all();
+    root_cell->clear_all();
+    root_via->clear_all();
+    root_wire->clear_all();
+    for (unsigned i = 0; i < (int) sizeof(layer_wire_info) / sizeof(layer_wire_info[0]); i++)
+        if (layer_wire_info[i] != NULL) {
+            delete layer_wire_info[i];
+            layer_wire_info[i] = NULL;
+        }
+    for (unsigned i = 0; i < (int) sizeof(layer_via_info) / sizeof(layer_via_info[0]); i++)
+        if (layer_via_info[i] != NULL) {
+            delete layer_via_info[i];
+            layer_via_info[i] = NULL;
+        }
+}
+
 int ObjectDB::load_objets(string file_name)
 {
     FILE *fp = fopen(file_name.c_str(), "rt");
@@ -183,6 +210,7 @@ int ObjectDB::load_objets(string file_name)
         obj.p1.setX(x1);
         obj.p1.setY(y1);
         obj.type3 = t & 0xff;
+        obj.type3 = obj.type3+1;//TODO repair me
         obj.type2 = t >> 8 & 0xff;
         obj.type = t >> 16 & 0xff;
         add_object(obj);

@@ -1,5 +1,4 @@
 #include "connectview.h"
-#include "objectdb.h"
 #include <QPainter>
 #include "globalconst.h"
 #include <QMessageBox>
@@ -8,7 +7,7 @@ extern GlobalConst gcst;
 extern ObjectDB odb;
 //following parameter is for view_rect move
 const int step_para =3;
-const double min_scale = 0.5;
+const double min_scale = 0.03125;
 const double max_scale = 16;
 
 ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
@@ -25,6 +24,42 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
     setMouseTracking(true);
 }
 
+void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
+{
+    QPoint p0(width() * (obj.p0.x() - view_rect.left()) / view_rect.width(),
+        height()* (obj.p0.y() - view_rect.top()) / view_rect.height());
+    QPoint p1(width() * (obj.p1.x() - view_rect.left()) / view_rect.width(),
+        height()* (obj.p1.y() - view_rect.top()) / view_rect.height());
+
+    painter.setBrush(QBrush(Qt::NoBrush));
+    switch (obj.type) {
+    case OBJ_AREA:
+        switch (obj.type2) {
+        case AREA_CELL:
+            painter.setPen(QPen(Qt::red, 1));
+            break;
+        case AREA_LEARN:
+            painter.setPen(QPen(Qt::blue, 1));
+            break;
+        case AREA_EXTRACT:
+            painter.setPen(QPen(Qt::yellow, 1, Qt::DotLine));
+            break;
+        }
+        painter.drawRect(QRect(p0, p1));
+        break;
+    case OBJ_LINE:
+        painter.setPen(QPen(Qt::blue, 1));
+        if (obj.type3 == bk_layer)
+            painter.drawLine(p0, p1);        
+        break;
+    case OBJ_POINT:
+        painter.setPen(QPen(Qt::green, 1, Qt::DotLine));
+        if (obj.type3 == bk_layer)
+            painter.drawEllipse(p0, 9, 9);        
+        break;
+    }
+}
+
 void ConnectView::draw_element(QPainter &painter)
 {
 	vector<ElementObj*> rst;
@@ -39,7 +74,7 @@ void ConnectView::draw_element(QPainter &painter)
 			painter.setPen(QPen(Qt::blue, 1));
 			break;
 		case AREA_EXTRACT:
-			painter.setPen(QPen(Qt::yellow, 1));
+            painter.setPen(QPen(Qt::yellow, 1, Qt::DotLine));
 			break;
 		}
 		QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
@@ -51,10 +86,11 @@ void ConnectView::draw_element(QPainter &painter)
 
     odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, view_rect, rst);
     painter.setPen(QPen(Qt::blue, 1));
+    painter.setBrush(QBrush(Qt::NoBrush));
     if (rst.size()!=0)
         qDebug("draw %d lines", rst.size());
     for (unsigned i = 0; i < rst.size(); i++) {
-        if (rst[i]->type3 + 2 == bk_layer) { //TODO fix it
+        if (rst[i]->type3 == bk_layer) {
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
             QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
@@ -69,12 +105,15 @@ void ConnectView::draw_element(QPainter &painter)
     if (rst.size()!=0)
         qDebug("draw %d vias", rst.size());
     for (unsigned i = 0; i < rst.size(); i++) {
-        if (rst[i]->type3 + 2 == bk_layer) { //TODO fix it
+        if (rst[i]->type3 == bk_layer) {
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
             painter.drawEllipse(p0, 9, 9);
         }
     }
+
+    if (ms.state == CHOOSE_ANO_POINT)
+        draw_obj(ms.draw_obj, painter);
 }
 
 void ConnectView::paintEvent(QPaintEvent *)
@@ -212,11 +251,52 @@ void ConnectView::load_objects(string file_name)
         update();
 }
 
+void ConnectView::set_mark(unsigned char type, unsigned char type2)
+{
+    ms.state = CREATE_NEW;
+    ms.type = type;
+    ms.type2 = type2;
+    setFocus();
+}
+
+void ConnectView::clear_objs()
+{
+    odb.clear_all();
+    update();
+}
+
 void ConnectView::mouseMoveEvent(QMouseEvent *event)
 {
-    QPoint mouse = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
-    char s[200];
-    emit mouse_change(mouse, QString(s));
+    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    char s[200] = "";
+    if (ms.state == CHOOSE_ANO_POINT) {
+        ms.draw_obj.p1 = mp;
+        update();
+    }
+    emit mouse_change(mp, QString(s));
+}
+
+void ConnectView::mousePressEvent(QMouseEvent *event)
+{
+    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    if (ms.state == CREATE_NEW) {
+        ms.draw_obj.type = ms.type;
+        ms.draw_obj.type2 = ms.type2;
+        ms.draw_obj.type3 = bk_layer;
+        ms.draw_obj.p0 = mp;
+        ms.state = CHOOSE_ANO_POINT;
+    }
+}
+
+void ConnectView::mouseReleaseEvent(QMouseEvent *event)
+{
+    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    if (ms.state == CHOOSE_ANO_POINT) {
+        ms.draw_obj.p1 = mp;
+        odb.add_object(ms.draw_obj);
+        ms.state = CREATE_NEW;
+        update();
+    }
 }
 
 void ConnectView::server_connected()
@@ -277,6 +357,11 @@ void ConnectView::train(bool cell_train, int i1, int i2, int i3, int i4, float f
     if (cell_train) {
         qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         QPoint p0(1551572, 255590), p1(1565716, 259494);
+        //emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+        vector<ElementObj*> tr;
+        odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, gcst.bound_rect_bu(), tr);
+        p0 = tr[0]->p0;
+        p1 = tr[0]->p1;
         emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
     }    
 }
@@ -287,11 +372,20 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         SearchRects * sr = new SearchRects;
         sr->dir.push_back(POWER_UP | POWER_DOWN);
-        sr->rects.push_back(QRect(1300000, 200000, 500000, 500000));
+        //sr->rects.push_back(QRect(1300000, 200000, 500000, 500000));
+        //emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+        vector<ElementObj*> er;
+        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, gcst.bound_rect_bu(), er);
+        QPoint p0 = er[0]->p0;
+        QPoint p1 = er[0]->p1;
+        sr->rects.push_back(QRect(p0, p1));
         emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
     } else {
         qInfo("Accept wire extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         VWSearchRequest * preq = new VWSearchRequest;
+        preq->lpa.push_back(LayerParam(1, 4, 9,
+            0,
+            16, 0.5, 0.5, 2));
         preq->lpa.push_back(LayerParam(2, 10, 9,
             RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
             16, 0.5, 0.5, 2));
@@ -301,6 +395,13 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         preq->lpa.push_back(LayerParam(4, 12, 10,
             RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
             16, 0.5, 0.5, 2));
-        emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 586000, 65536, 65536));
+        //QRect(1430000, 586000, 65536, 65536), QRect(1450000, 600000, 65536, 65536)
+        //QRect(1450000, 586000, 65536, 65536)
+        //emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 600000, 65536, 65536));
+        vector<ElementObj*> er;
+        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, gcst.bound_rect_bu(), er);
+        QPoint p0 = er[0]->p0;
+        QPoint p1 = er[0]->p1;
+        emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
     }
 }

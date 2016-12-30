@@ -31,7 +31,9 @@
     <addaction name="actionExtract"/>
     <addaction name="separator"/>
     <addaction name="actionMark_Cell"/>
+    <addaction name="actionMark_Extract_Area"/>
     <addaction name="actionLoad_Objects"/>
+    <addaction name="actionClear_Objects"/>
    </widget>
    <addaction name="menuEdit"/>
   </widget>
@@ -62,6 +64,16 @@
   <action name="actionLoad_Objects">
    <property name="text">
     <string>Load Objects</string>
+   </property>
+  </action>
+  <action name="actionMark_Extract_Area">
+   <property name="text">
+    <string>Mark Extract Area</string>
+   </property>
+  </action>
+  <action name="actionClear_Objects">
+   <property name="text">
+    <string>Clear Objects</string>
    </property>
   </action>
  </widget>

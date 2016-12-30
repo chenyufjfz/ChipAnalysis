@@ -133,6 +133,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
         else {
             ReqSearchParam * pa = &(req_pkt->params[0]);
             vector<ICLayerWr *> pic;
+            vector<SearchArea> search;
             for (int l=0; l<req_pkt->req_search_num; l++) {
                 vwe->set_extract_param(l, pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],
                          pa[l].parami[4], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], 0);
@@ -140,13 +141,15 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
                 qInfo("extract l=%d, wd=%d, vr=%d, rule=%x, gd=%d, p1=%f, p2=%f, p3=%f",
                       pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],pa[l].parami[4],
                       pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2]);
+                QRect rect(QPoint(pa[l].loc[0].x0, pa[l].loc[0].y0), QPoint(pa[l].loc[0].x1, pa[l].loc[0].y1));
+                if (rect.width()<32768 || rect.height()<32768)
+                    continue;
+                search.push_back(SearchArea(rect, 0));
+                qInfo("Receive wire&via search request (%d,%d)_(%d,%d)", rect.left(),
+                      rect.top(), rect.right(), rect.bottom());
             }
-            vector<SearchArea> search;
-            QRect rect(QPoint(pa[0].loc[0].x0, pa[0].loc[0].y0), QPoint(pa[0].loc[0].x1, pa[0].loc[0].y1));
-            search.push_back(SearchArea(rect, 0));
+
             vector<MarkObj> objs;
-            qInfo("Receive wire&via search request (%d,%d)_(%d,%d)", rect.left(),
-                  rect.top(), rect.right(), rect.bottom());
             vwe->extract(pic, search, objs);
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
@@ -161,7 +164,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
                 ploc[j].x1 = objs[j].p1.x();
                 ploc[j].y1 = objs[j].p1.y();
                 unsigned short t = objs[j].type;
-                ploc[j].opt = t << 8 | objs[j].type3;
+                ploc[j].opt = t << 8 | pa[objs[j].type3].parami[0];
                 ploc[j].prob = objs[j].prob;
             }
             rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,

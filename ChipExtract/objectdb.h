@@ -43,6 +43,7 @@ public:
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
     void link_object(ElementObj * pobj);
     void delink_object(ElementObj * opbj);
+    void clear_all();
 };
 
 class ObjectDB
@@ -63,6 +64,7 @@ public:
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
     void add_object(ElementObj & obj);
     void del_object(ElementObj * p_obj);
+    void clear_all();
     int load_objets(string file_name);
     unsigned get_wire_width(unsigned char type, unsigned char layer);
     unsigned get_via_radius(unsigned char type, unsigned char layer);

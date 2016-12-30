@@ -28,6 +28,12 @@ private slots:
 
     void on_actionLoad_Objects_triggered();
 
+    void on_actionMark_Extract_Area_triggered();
+
+    void on_actionMark_Cell_triggered();
+
+    void on_actionClear_Objects_triggered();
+
 private:
     ParamDialog param_dlg;
     QLabel *status_label;

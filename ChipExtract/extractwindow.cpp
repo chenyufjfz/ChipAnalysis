@@ -88,6 +88,16 @@ void MainWindow::on_actionExtract_triggered()
 
 }
 
+void MainWindow::on_actionMark_Cell_triggered()
+{
+    connect_view->set_mark(OBJ_AREA, AREA_LEARN);
+}
+
+void MainWindow::on_actionMark_Extract_Area_triggered()
+{
+    connect_view->set_mark(OBJ_AREA, AREA_EXTRACT);
+}
+
 void MainWindow::on_actionLoad_Objects_triggered()
 {
     QString image_file_name = QFileDialog::getOpenFileName( this,
@@ -103,3 +113,7 @@ void MainWindow::mouse_change(QPoint pos, QString msg)
     status_label->setText(s);
 }
 
+void MainWindow::on_actionClear_Objects_triggered()
+{
+    connect_view->clear_objs();
+}

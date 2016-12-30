@@ -6,13 +6,25 @@
 #include <QMouseEvent>
 #include "renderimage.h"
 #include "searchobject.h"
+#include "objectdb.h"
+
+enum {
+    CREATE_NEW,
+    CHOOSE_ANO_POINT,
+    SELECT_EXIST
+};
+struct MarkState {
+    int state;
+    unsigned char type;
+    unsigned char type2;
+    ElementObj draw_obj;
+};
 
 class ConnectView : public QWidget
 {
     Q_OBJECT
 public:
     explicit ConnectView(QWidget *parent = 0);
-
 
 signals:
     void render_bkimg(const unsigned char layer, const QRect rect,
@@ -36,15 +48,21 @@ public:
     void train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
     void extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
     void load_objects(string file_name);
+    void set_mark(unsigned char type, unsigned char type2);
+    void clear_objs();
 
 protected:
+    void draw_obj(ElementObj & obj, QPainter &painter);
 	void draw_element(QPainter &painter);
     void paintEvent(QPaintEvent *);
     void keyPressEvent(QKeyEvent *e);    
     void mouseMoveEvent(QMouseEvent *event);
+    void mousePressEvent(QMouseEvent *event);
+    void mouseReleaseEvent(QMouseEvent *event);
 
 protected:
     bool connect_to_server;
+    MarkState ms;
 	QImage render_img;
     QRect render_rect, view_rect;
     QPoint center;
