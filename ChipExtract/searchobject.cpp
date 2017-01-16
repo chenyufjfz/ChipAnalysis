@@ -106,13 +106,15 @@ void SearchObject::extract_wire_via(QSharedPointer<VWSearchRequest> preq, const 
         pa[l].parami[1] = preq->lpa[l].wire_wd;
         pa[l].parami[2] = preq->lpa[l].via_rd;
         pa[l].parami[3] = preq->lpa[l].rule & 0xffffffff;
-        pa[l].parami[4] = preq->lpa[l].grid_wd;
+        pa[l].parami[4] = preq->lpa[l].warn_rule & 0xffffffff;
+        pa[l].parami[5] = preq->lpa[l].grid_wd;
         pa[l].paramf[0] = preq->lpa[l].param1;
         pa[l].paramf[1] = preq->lpa[l].param2;
         pa[l].paramf[2] = preq->lpa[l].param3;
-        qInfo("extract l=%d, wd=%d, vr=%d, gd=%d, rule=%x, p1=%f, p2=%f, p3=%f",
-              pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],
-              pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2]);
+        pa[l].paramf[3] = preq->lpa[l].param4;
+        qInfo("extract l=%d, wd=%d, vr=%d, gd=%d, rule=%x, wrule=%x, p1=%f, p2=%f, p3=%f, p4=%f",
+              pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
+              pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
     }
     rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
                    RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);

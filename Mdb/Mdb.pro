@@ -26,6 +26,9 @@ DEFINES += _CRT_SECURE_NO_WARNINGS \
 }
 
 
-Release:DESTDIR = $$_PRO_FILE_PWD_/../lib/release
-Debug:DESTDIR = $$_PRO_FILE_PWD_/../lib/debug
+CONFIG(debug, debug|release) {
+DESTDIR = $$_PRO_FILE_PWD_/../lib/debug
+} else {
+DESTDIR = $$_PRO_FILE_PWD_/../lib/release
+}
 

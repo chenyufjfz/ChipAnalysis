@@ -1,3 +1,13 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 #include "NativeFeatureIncludes.h"
 #if _RAKNET_SUPPORT_PacketizedTCP==1 && _RAKNET_SUPPORT_TCPInterface==1
 
@@ -77,8 +87,8 @@ bool PacketizedTCP::SendList( const char **data, const unsigned int *lengths, co
 #endif
 	
 
-	unsigned int lengthsArray[512];
-	const char *dataArray[512];
+	unsigned int lengthsArray[513];
+	const char *dataArray[513];
 	dataArray[0]=(char*) &dataLength;
 	lengthsArray[0]=sizeof(dataLength);
 	for (int i=0; i < 512 && i < numParameters; i++)

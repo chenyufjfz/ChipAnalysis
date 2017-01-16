@@ -1,9 +1,17 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 /// \file
 /// \brief Declares RakPeer class.
 ///
-/// This file is part of RakNet Copyright 2003 Jenkins Software LLC
-///
-/// Usage of RakNet is subject to the appropriate license agreement.
+
 
 // TODO - RakNet 4 - Add network simulator
 // TODO - RakNet 4 - Enable disabling flow control per connections
@@ -705,6 +713,7 @@ protected:
 	// Two versions needed because some buggy compilers strip the last parameter if unused, and crashes
 	ConnectionAttemptResult SendConnectionRequest( const char* host, unsigned short remotePort, const char *passwordData, int passwordDataLength, PublicKey *publicKey, unsigned connectionSocketIndex, unsigned int extraData, unsigned sendConnectionAttemptCount, unsigned timeBetweenSendConnectionAttemptsMS, RakNet::TimeMS timeoutTime, RakNetSocket2* socket );
 	ConnectionAttemptResult SendConnectionRequest( const char* host, unsigned short remotePort, const char *passwordData, int passwordDataLength, PublicKey *publicKey, unsigned connectionSocketIndex, unsigned int extraData, unsigned sendConnectionAttemptCount, unsigned timeBetweenSendConnectionAttemptsMS, RakNet::TimeMS timeoutTime );
+	void HandleConnectionCancelQueue( );
 	///Get the reliability layer associated with a systemAddress.  
 	/// \param[in] systemAddress The player identifier 
 	/// \return 0 if none
@@ -856,7 +865,9 @@ protected:
 	DataStructures::List<PluginInterface2*> pluginListTS, pluginListNTS;
 
 	DataStructures::Queue<RequestedConnectionStruct*> requestedConnectionQueue;
+	DataStructures::Queue<SystemAddress> requestedConnectionCancelQueue;
 	SimpleMutex requestedConnectionQueueMutex;
+	SimpleMutex requestedConnectionCancelQueueMutex;
 
 	// void RunMutexedUpdateCycle(void);
 

@@ -1,11 +1,18 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 /// \file DS_WeightedGraph.h
 /// \internal
 /// \brief Weighted graph.  
 /// \details I'm assuming the indices are complex map types, rather than sequential numbers (which could be implemented much more efficiently).
 ///
-/// This file is part of RakNet Copyright 2003 Jenkins Software LLC
-///
-/// Usage of RakNet is subject to the appropriate license agreement.
 
 
 #ifndef __WEIGHTED_GRAPH_H
@@ -273,7 +280,7 @@ namespace DataStructures
 				if (row==0)
 				{
 					path.Insert(startNode, _FILE_AND_LINE_);
-					for (col=0; outputQueue.Size(); col++)
+					for (col=0; !outputQueue.Empty(); col++)
 						path.Insert(outputQueue.Pop(), _FILE_AND_LINE_);
 					return true;
 				}
@@ -289,7 +296,7 @@ namespace DataStructures
 		}
 
 		path.Insert(startNode, _FILE_AND_LINE_);
-		for (col=0; outputQueue.Size(); col++)
+		while (!outputQueue.Empty())
 			path.Insert(outputQueue.Pop(), _FILE_AND_LINE_);
 		return true;
 	}

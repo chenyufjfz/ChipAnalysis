@@ -18,6 +18,7 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
     bk_layer = 0;
     render_bk_layer = 0;
     connect_to_server = false;
+    hide_element = false;
     setAutoFillBackground(false);
     setAttribute( Qt::WA_OpaquePaintEvent, true );
     setAttribute( Qt::WA_NoSystemBackground, true );
@@ -35,7 +36,7 @@ void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
     switch (obj.type) {
     case OBJ_AREA:
         switch (obj.type2) {
-        case AREA_CELL:
+        case AREA_CELL:        
             painter.setPen(QPen(Qt::red, 1));
             break;
         case AREA_LEARN:
@@ -43,6 +44,10 @@ void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
             break;
         case AREA_EXTRACT:
             painter.setPen(QPen(Qt::yellow, 1, Qt::DotLine));
+            break;
+        case AREA_CHECK_ERR:
+            if (obj.type3 == bk_layer)
+                painter.setPen(QPen(Qt::red, 1));
             break;
         }
         painter.drawRect(QRect(p0, p1));
@@ -63,11 +68,13 @@ void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
 void ConnectView::draw_element(QPainter &painter)
 {
 	vector<ElementObj*> rst;
-	odb.get_objects(OBJ_AREA, AREA_CELL_MASK | AREA_LEARN_MASK | AREA_EXTRACT_MASK, view_rect, rst);
+    odb.get_objects(OBJ_AREA, AREA_CELL_MASK | AREA_LEARN_MASK | AREA_EXTRACT_MASK | AREA_CHECK_ERR_MASK, view_rect, rst);
 	painter.setBrush(QBrush(Qt::NoBrush));
 	for (unsigned i = 0; i < rst.size(); i++) {
+        if (rst[i]->type2==AREA_CHECK_ERR && rst[i]->type3 != bk_layer)
+            continue;
 		switch (rst[i]->type2) {
-		case AREA_CELL:
+		case AREA_CELL:        
 			painter.setPen(QPen(Qt::red, 1));
 			break;
 		case AREA_LEARN:
@@ -75,7 +82,10 @@ void ConnectView::draw_element(QPainter &painter)
 			break;
 		case AREA_EXTRACT:
             painter.setPen(QPen(Qt::yellow, 1, Qt::DotLine));
-			break;
+            break;
+        case AREA_CHECK_ERR:
+            painter.setPen(QPen(QColor(200 * rst[i]->prob, 0, 0), 1));
+            break;
 		}
 		QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
 			height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
@@ -156,8 +166,8 @@ void ConnectView::paintEvent(QPaintEvent *)
                  render_img.width() * view_rect.width() /render_rect.width(),
                  render_img.height()* view_rect.height() /render_rect.height());
     painter.drawImage(QRect(0,0, width(), height()), render_img, source);
-
-	draw_element(painter);
+    if (!hide_element)
+        draw_element(painter);
     qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d), source=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
            view_rect.right(), view_rect.bottom(), size().width(), size().height(), source.width(), source.height());
 }
@@ -232,6 +242,9 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
     case Qt::Key_9:
         if (gcst.num_layer() > 9)
             bk_layer = 9;
+        break;
+    case Qt::Key_H:
+        hide_element = !hide_element;
         break;
     default:
         QWidget::keyPressEvent(e);
@@ -384,17 +397,17 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         qInfo("Accept wire extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         VWSearchRequest * preq = new VWSearchRequest;
         preq->lpa.push_back(LayerParam(1, 4, 9,
-            0,
-            16, 0.5, 0.5, 2));
+            RULE_END_WITH_VIA, RULE_END_WITH_VIA,
+            16, 0.5, 0.5, 1, 0));
         preq->lpa.push_back(LayerParam(2, 10, 9,
-            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
-            16, 0.5, 0.5, 2));
+            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
+            RULE_NO_hCONN, 16, 0.5, 0.5, 2, 0));
         preq->lpa.push_back(LayerParam(3, 12, 10,
-            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
-            16, 0.5, 0.5, 2));
+            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
+            RULE_NO_hCONN, 16, 0.5, 0.5, 2, 0));
         preq->lpa.push_back(LayerParam(4, 12, 10,
-            RULE_NO_LOOP | RULE_NO_UCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA,
-            16, 0.5, 0.5, 2));
+            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
+            RULE_NO_hCONN, 16, 0.5, 0.5, 1, 0));
         //QRect(1430000, 586000, 65536, 65536), QRect(1450000, 600000, 65536, 65536)
         //QRect(1450000, 586000, 65536, 65536)
         //emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 600000, 65536, 65536));

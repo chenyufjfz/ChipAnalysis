@@ -62,6 +62,7 @@ protected:
 
 protected:
     bool connect_to_server;
+    bool hide_element;
     MarkState ms;
 	QImage render_img;
     QRect render_rect, view_rect;

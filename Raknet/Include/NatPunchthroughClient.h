@@ -1,10 +1,16 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
 
 /// \file
 /// \brief Contains the NAT-punchthrough plugin for the client.
 ///
-/// This file is part of RakNet Copyright 2003 Jenkins Software LLC
-///
-/// Usage of RakNet is subject to the appropriate license agreement.
 
 #include "NativeFeatureIncludes.h"
 #if _RAKNET_SUPPORT_NatPunchthroughClient==1
@@ -189,6 +195,7 @@ public:
 	virtual void OnRakPeerShutdown(void);
 	void Clear(void);
 
+#ifndef SWIG
 	struct SendPing
 	{
 		RakNet::Time nextActionTime;
@@ -222,6 +229,7 @@ public:
 		} testMode;
 	} sp;
 
+#endif
 protected:
 	unsigned short mostRecentExternalPort;
 	//void OnNatGroupPunchthroughRequest(Packet *packet);

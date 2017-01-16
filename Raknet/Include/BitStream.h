@@ -1,11 +1,18 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 /// \file BitStream.h
 /// \brief This class allows you to write and read native types as a string of bits.  
 /// \details BitStream is used extensively throughout RakNet and is designed to be used by users as well.
 ///
-/// This file is part of RakNet Copyright 2003 Jenkins Software LLC
-///
-/// Usage of RakNet is subject to the appropriate license agreement.
-///
+
 
 #if defined(_MSC_VER) && _MSC_VER < 1299 // VC6 doesn't support template specialization
 #include "BitStream_NoTemplate.h"
@@ -14,6 +21,9 @@
 #ifndef __BITSTREAM_H
 #define __BITSTREAM_H
 
+#include <cmath>
+#include <cfloat>
+#include <string>
 #include "RakMemoryOverride.h"
 #include "RakNetDefines.h"
 #include "Export.h"
@@ -21,8 +31,7 @@
 #include "RakString.h"
 #include "RakWString.h"
 #include "RakAssert.h"
-#include <math.h>
-#include <float.h>
+
 
 #ifdef _MSC_VER
 #pragma warning( push )
@@ -652,6 +661,10 @@ namespace RakNet
 		/// \internal Unrolled inner loop, for when performance is critical
 		bool ReadAlignedVar32(char *inOutByteArray);
 
+        inline void Write(const std::string &inStringVar)
+        {
+            RakString::Serialize(inStringVar.c_str(), this);
+        }
 		inline void Write(const char * const inStringVar)
 		{
 			RakString::Serialize(inStringVar, this);
@@ -885,7 +898,7 @@ namespace RakNet
 		{
 			return IsNetworkOrder();
 		}
-		inline static bool IsNetworkOrder(void) {static const bool r = IsNetworkOrderInternal(); return r;}
+		inline static bool IsNetworkOrder(void) {bool r = IsNetworkOrderInternal(); return r;}
 		// Not inline, won't compile on PC due to winsock include errors
 		static bool IsNetworkOrderInternal(void);
 		static void ReverseBytes(unsigned char *inByteArray, unsigned char *inOutByteArray, const unsigned int length);
@@ -2015,7 +2028,7 @@ namespace RakNet
 	}
 
 	template <class templateType>
-	BitStream& operator<<(BitStream& out, templateType& c)
+	BitStream& operator<<(BitStream& out, const templateType& c)
 	{
 		out.Write(c);
 		return out;

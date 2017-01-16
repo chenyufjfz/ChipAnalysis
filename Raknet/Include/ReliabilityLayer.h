@@ -1,19 +1,17 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 /// \file
 /// \brief \b [Internal] Datagram reliable, ordered, unordered and sequenced sends.  Flow control.  Message splitting, reassembly, and coalescence.
 ///
-/// This file is part of RakNet Copyright 2003 Jenkins Software LLC
-///
-/// Usage of RakNet is subject to the appropriate license agreement.
-/// Creative Commons Licensees are subject to the
-/// license found at
-/// http://creativecommons.org/licenses/by-nc/2.5/
-/// Single application licensees are subject to the license found at
-/// http://www.jenkinssoftware.com/SingleApplicationLicense.html
-/// Custom license users are subject to the terms therein.
-/// GPL license users are subject to the GNU General Public
-/// License as published by the Free
-/// Software Foundation; either version 2 of the License, or (at your
-/// option) any later version.
+
 
 #ifndef __RELIABILITY_LAYER_H
 #define __RELIABILITY_LAYER_H
@@ -62,12 +60,86 @@ class PluginInterface2;
 class RakNetRandom;
 typedef uint64_t reliabilityHeapWeightType;
 
+
+
+class SortedSplittedPackets
+{
+private:
+	InternalPacket ** data;
+	unsigned int allocation_size;	
+	unsigned int addedPacketsCount;
+	SplitPacketIdType packetId;
+
+public:
+	SortedSplittedPackets()
+	{
+		data = NULL;
+		allocation_size = 0;
+		addedPacketsCount = 0;
+	}
+	~SortedSplittedPackets()
+	{
+		if (allocation_size > 0)
+		{
+			RakNet::OP_DELETE_ARRAY(data, _FILE_AND_LINE_);
+		}
+	}
+
+	void Preallocate(InternalPacket * internalPacket, const char *file, unsigned int line)
+	{
+		RakAssert(data == NULL);
+		allocation_size = internalPacket->splitPacketCount;
+		data = RakNet::OP_NEW_ARRAY<InternalPacket*>(allocation_size, file, line);
+		packetId = internalPacket->splitPacketId;
+
+		for (int i = 0; i < allocation_size; ++i)
+		{
+			data[i] = NULL;
+		}
+	}
+	bool Add(InternalPacket * internalPacket, const char *file, unsigned int line)
+	{
+		RakAssert(data != NULL);
+		RakAssert(internalPacket->splitPacketIndex < allocation_size);
+		RakAssert(packetId == internalPacket->splitPacketId);
+		RakAssert(data[internalPacket->splitPacketIndex] == NULL);
+		if (data[internalPacket->splitPacketIndex] == NULL)
+		{
+			data[internalPacket->splitPacketIndex] = internalPacket;
+			++addedPacketsCount;
+            return true;
+		}
+        return false;
+	}
+
+	unsigned int AllocSize()
+	{
+		return allocation_size;
+	}
+	unsigned int AddedPacketsCount()
+	{
+		return addedPacketsCount;
+	}
+	InternalPacket * Get(unsigned int index)
+	{
+		RakAssert(data != NULL);
+		RakAssert(index < allocation_size);
+		return data[index];
+	}
+	SplitPacketIdType PacketId()
+	{
+		RakAssert(data != NULL);
+		return packetId;	
+	}
+};
+
+
 // int SplitPacketIndexComp( SplitPacketIndexType const &key, InternalPacket* const &data );
 struct SplitPacketChannel//<SplitPacketChannel>
 {
 	CCTimeType lastUpdateTime;
 
-	DataStructures::List<InternalPacket*> splitPacketList;
+	SortedSplittedPackets splitPacketList;
 
 #if PREALLOCATE_LARGE_MESSAGES==1
 	InternalPacket *returnedPacket;

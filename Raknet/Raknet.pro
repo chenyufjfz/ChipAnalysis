@@ -18,9 +18,12 @@ unix {
 }
 
 
+CONFIG(debug, debug|release) {
+DESTDIR = $$_PRO_FILE_PWD_/../lib/debug
+} else {
+DESTDIR = $$_PRO_FILE_PWD_/../lib/release
+}
 
-Release:DESTDIR = $$_PRO_FILE_PWD_/../lib/release
-Debug:DESTDIR = $$_PRO_FILE_PWD_/../lib/debug
 
 HEADERS += \
     Include/_FindFirst.h \

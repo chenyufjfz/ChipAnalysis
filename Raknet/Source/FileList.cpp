@@ -1,3 +1,13 @@
+/*
+ *  Copyright (c) 2014, Oculus VR, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant 
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 #include "FileList.h"
 
 #if _RAKNET_SUPPORT_FileOperations==1
@@ -5,7 +15,8 @@
 #include <stdio.h> // RAKNET_DEBUG_PRINTF
 #include "RakAssert.h"
 #if defined(ANDROID)
-#include <asm/io.h>
+//#include <asm/io.h>
+//#include <asm/arch/io.h>
 #elif defined(_WIN32) || defined(__CYGWIN__)
 #include <io.h>
 

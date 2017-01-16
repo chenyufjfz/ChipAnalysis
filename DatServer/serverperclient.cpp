@@ -36,8 +36,8 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 				if (layer[i] < bk_img->get_layer_num()) {
 					if (ce[layer[i]] == NULL)
 						ce[layer[i]] = new CellExtract;
-					ce[layer[i]]->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6]
-						, pa->paramf[0], pa->paramf[1], pa->paramf[2]);
+                    ce[layer[i]]->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
+                        pa->parami[7], pa->paramf[0], pa->paramf[1], pa->paramf[2], pa->paramf[3]);
 					MarkObj obj;
 					vector<MarkObj> objs;
 					obj.type = OBJ_AREA;
@@ -78,8 +78,8 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 						qCritical("receive cell extract req before train!");
 						break;
 					}
-					ce[layer[i]]->set_extract_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6]
-						, pa->paramf[0], pa->paramf[1], pa->paramf[2], pa->paramf[3]);
+                    ce[layer[i]]->set_extract_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
+                        pa->parami[7], pa->paramf[0], pa->paramf[1], pa->paramf[2], pa->paramf[3]);
 					vector<SearchArea> areas;
 					for (int j = 0; j < req_pkt->req_search_num; j++)
 						areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
@@ -135,12 +135,12 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
             vector<ICLayerWr *> pic;
             vector<SearchArea> search;
             for (int l=0; l<req_pkt->req_search_num; l++) {
-                vwe->set_extract_param(l, pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],
-                         pa[l].parami[4], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], 0);
+                vwe->set_extract_param(l, pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
+                          pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
                 pic.push_back(bk_img->get_layer(pa[l].parami[0]));
-                qInfo("extract l=%d, wd=%d, vr=%d, rule=%x, gd=%d, p1=%f, p2=%f, p3=%f",
-                      pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3],pa[l].parami[4],
-                      pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2]);
+                qInfo("extract l=%d, wd=%d, vr=%d, rule=%x, wrule=%x, gd=%d, p1=%f, p2=%f, p3=%f",
+                      pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
+                      pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
                 QRect rect(QPoint(pa[l].loc[0].x0, pa[l].loc[0].y0), QPoint(pa[l].loc[0].x1, pa[l].loc[0].y1));
                 if (rect.width()<32768 || rect.height()<32768)
                     continue;
