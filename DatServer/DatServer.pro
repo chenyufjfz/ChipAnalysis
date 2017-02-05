@@ -22,8 +22,8 @@ INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/release/
 
 TEMPLATE = app
 LIBS += -lRaknet -lMdb
-INCLUDEPATH += ../Raknet/Include ../Mdb
-DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
+INCLUDEPATH += $$_PRO_FILE_PWD_/../Raknet/Include $$_PRO_FILE_PWD_/../Mdb
+DEPENDPATH += $$_PRO_FILE_PWD_/../Raknet/Source $$_PRO_FILE_PWD_/../Raknet/Include $$_PRO_FILE_PWD_/../Mdb
 win32:LIBS += -lWs2_32 -ladvapi32
 
 SOURCES += main.cpp\

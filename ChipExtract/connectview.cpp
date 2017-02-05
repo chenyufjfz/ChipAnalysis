@@ -19,10 +19,21 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
     render_bk_layer = 0;
     connect_to_server = false;
     hide_element = false;
+    ms.state = SELECT_EXIST;
     setAutoFillBackground(false);
     setAttribute( Qt::WA_OpaquePaintEvent, true );
     setAttribute( Qt::WA_NoSystemBackground, true );
     setMouseTracking(true);
+#if 0
+    ElementObj obj;
+    obj.type = OBJ_AREA;
+    obj.type2 = AREA_EXTRACT;
+    obj.type3 = 1;
+    obj.state = 0;
+    obj.p0 = QPoint(1441792, 589824);
+    obj.p1 = QPoint(1504560, 655000);
+    odb.add_object(obj);
+#endif
 }
 
 void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
