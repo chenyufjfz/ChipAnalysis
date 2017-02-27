@@ -1,106 +1,337 @@
 #include "searchobject.h"
-#include "RakPeerInterface.h"
-#include "globalconst.h"
+#include "clientthread.h"
 
 extern RakNet::RakPeerInterface *rak_peer;
-extern RakNet::SystemAddress server_addr;
-extern GlobalConst gcst;
+extern ClientThread ct;
+
+bool SearchObject::inited = false;
+QAtomicInteger<unsigned> SearchObject::global_token(1);
+
+static void search_result_del(SearchResults * sr)
+{
+	qInfo("Delete SearchResults");
+	delete sr;
+}
+
+static void search_request_del(ReqSearchPkt * rsp)
+{
+	qInfo("Delete SearchRequest");
+	free(rsp);
+}
+
+static string get_host_name(string prj_file)
+{
+	string host_name;
+	if ((prj_file[0] == '/' && prj_file[1] == '/') ||
+		(prj_file[0] == '\\' && prj_file[1] == '\\'))
+		host_name = prj_file.substr(2, prj_file.find_first_of("\\/") - 2);
+	else
+		host_name = "127.0.0.1";
+	return host_name;
+}
+
+void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy)
+{
+	if (!inited) {
+		inited = true;
+		qRegisterMetaType<QSharedPointer<SearchResults> >();
+		qRegisterMetaType<QSharedPointer<SearchRects> >();
+		qRegisterMetaType<QSharedPointer<VWSearchRequest> >();
+		qRegisterMetaType<QSharedPointer<RakNet::Packet> >();
+		qRegisterMetaType<string>("string");
+	}
+	SearchObject * search_object = new SearchObject(pobj);
+
+	if (!connect(pobj, SIGNAL(train_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float)),
+		search_object, SLOT(train_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float))))
+		qFatal("Connect train_cell fail");
+	if (!connect(pobj, SIGNAL(extract_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float)),
+		search_object, SLOT(extract_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float))))
+		qFatal("Connect extract_cell fail");
+	if (!connect(search_object, SIGNAL(extract_cell_done(QSharedPointer<SearchResults>)),
+		pobj, SLOT(extract_cell_done(QSharedPointer<SearchResults>))))
+		qFatal("Connect extract_cell_done fail");
+	if (!connect(pobj, SIGNAL(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect)),
+		search_object, SLOT(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect))))
+		qFatal("Connect extract_wire_via fail");
+	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
+		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
+		qFatal("Connect extract_wire_via_done fail");	
+
+	if (!connect(&ct, SIGNAL(search_packet_arrive(QSharedPointer<RakNet::Packet>)), search_object, SLOT(search_packet_arrive(QSharedPointer<RakNet::Packet>))))
+		qFatal("Connect search_packet_arrive fail");
+	if (!connect(&ct, SIGNAL(server_connected(QSharedPointer<RakNet::Packet>)), search_object, SLOT(server_connected(QSharedPointer<RakNet::Packet>))))
+		qFatal("Connect ct's server_connected fail");
+	if (!connect(&ct, SIGNAL(server_disconnected(QSharedPointer<RakNet::Packet>)), search_object, SLOT(server_disconnected(QSharedPointer<RakNet::Packet>))))
+		qFatal("Connect ct's server_disconnected fail");
+	if (!connect(search_object, SIGNAL(server_found()), pobj, SLOT(server_connected())))
+		qFatal("Connect view  server_connected fail");
+	if (!connect(search_object, SIGNAL(server_lost()), pobj, SLOT(server_disconnected())))
+		qFatal("Connect view  server_disconnected fail");
+
+	search_object->set_connect_policy(policy);
+	qInfo("SearchObject %p is created by %p", search_object, pobj, policy);
+}
 
 SearchObject::SearchObject(QObject *parent) : QObject(parent)
-{
-    connect_to_server = false;
+{	
+	token = 0;
 }
 
-void SearchObject::server_connected()
+SearchObject::~SearchObject()
 {
-    connect_to_server = true;
+	if (token != 0)
+		send_disconnect();
+	qInfo("SearchObject %p is deleted, token=%d", this, token);
 }
 
-void SearchObject::server_disconnected()
+void SearchObject::set_connect_policy(ChooseServerPolicy policy)
 {
-    connect_to_server = false;
+	qInfo("SearchObject %p policy=%d", this, policy);
+	connect_policy = policy;
 }
 
-static void search_result_del(SearchResults * ms)
+SearchObject::ChooseServerPolicy SearchObject::get_connect_policy()
 {
-    qInfo("Do delete SearchResults");
-    delete ms;
+	return connect_policy;
 }
 
-void SearchObject::train_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+void SearchObject::set_prefer_server(string server)
+{
+	qInfo("SearchObject prefer server=%s", server.c_str());
+	prefer_server = server;
+}
+
+string SearchObject::get_prefer_server()
+{
+	return prefer_server;
+}
+
+void SearchObject::send_disconnect()
+{
+	if (token != 0) {
+		ReqSearchPkt pkt;
+		pkt.typeId = ID_REQUIRE_OBJ_SEARCH;
+		pkt.token = token;
+		pkt.command = SHUT_DOWN;
+		pkt.req_search_num = 0;
+		pkt.prj_file[0] = 0;
+		rak_peer->Send((char *)&pkt, sizeof(pkt), HIGH_PRIORITY,
+			RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
+		ct.disconnect_server(server_addr);
+	}
+}
+
+int SearchObject::try_server(bool resel)
+{
+	if (token != 0) {
+		send_disconnect();			
+		resel = true;
+	}
+	if (cad_idx >= cad_server.size() || cad_server.empty())
+		resel = true;
+	if (resel) {
+		cad_idx = 0;
+		token = 0;
+		cad_server.clear();
+		switch (connect_policy) {
+		case RemoteSpecifyLocal:
+			cad_server.push_back(prj_host);
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			cad_server.push_back("127.0.0.1");
+			break;
+		case RemoteSpecify:
+			cad_server.push_back(prj_host);
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			break;
+		case RemoteLocal:
+			cad_server.push_back(prj_host);
+			cad_server.push_back("127.0.0.1");
+			break;
+		case RemoteOnly:
+			cad_server.push_back(prj_host);
+			break;
+		case SpecifyRemoteLocal:
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			cad_server.push_back(prj_host);
+			cad_server.push_back("127.0.0.1");
+			break;
+		case SpecifyRemote:
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			cad_server.push_back(prj_host);
+			break;
+		case SpecifyLocal:
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			cad_server.push_back("127.0.0.1");
+			break;
+		case SpecifyOnly:
+			if (!prefer_server.empty())
+				cad_server.push_back(prefer_server);
+			break;
+		case LocalOnly:
+			cad_server.push_back("127.0.0.1");
+			break;
+		}
+		for (int i = 0; i < cad_server.size() - 1; i++)
+			for (int j = i + 1; j < cad_server.size();) {
+			if (cad_server[i] == cad_server[j])
+				cad_server.erase(cad_server.begin() + j);
+			else
+				j++;
+			}
+		Q_ASSERT(!cad_server.empty());
+	}		
+	else {
+		Q_ASSERT(token == 0);
+		cad_idx++;
+		if (cad_idx >= cad_server.size()) {
+			emit server_lost();
+			return -1;
+		}
+	}	
+	Q_ASSERT(cad_idx < cad_server.size());
+	qInfo("Trying connect to %s", cad_server[cad_idx].c_str());
+	int ret = ct.connect_to_server(cad_server[cad_idx], server_addr);
+	switch (ret) {
+	case (ClientThread::CONNECTED) :		
+		token = global_token++;
+		qInfo("Connect to server immediately, toke=%d", token);
+		emit server_found();
+		return 0;
+	case (ClientThread::CONNECT_IN_PROGRESS) :
+		return 1;
+	case (ClientThread::INVALID_NAME) :
+		return try_server(false);
+	default:
+		qCritical("ClientThread connect_to_server return %d", ret);
+		return try_server(false);
+	}
+}
+
+void SearchObject::process_req_queue()
+{
+	if (token != 0 && !req_queue.empty()) { //if connected and req_queue not empty, send one request
+		req_queue.begin()->req_pkt->token = token;
+		rak_peer->Send((char *)req_queue.begin()->req_pkt.data(), req_queue.begin()->req_len, HIGH_PRIORITY,
+			RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
+		req_queue.erase(req_queue.begin());
+	}
+}
+
+void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
      unsigned char dir, const QRect rect, float param1, float param2, float param3)
 {
-    if (!connect_to_server)
-        return;
+	if (prj.length() > 255) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (get_host_name(prj) != prj_host) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
 
-    int req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
-    ReqSearchPkt * req_pkt = (ReqSearchPkt *) malloc(req_len);
-    req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
-    req_pkt->command = CELL_TRAIN;
-    req_pkt->req_search_num = 1;
-    req_pkt->params[0].parami[0] = (int) l0 | ((int)l1 << 8) | ((int)l2 << 16) | ((int)l3 << 24);
-    req_pkt->params[0].parami[1] = 0xffffffff;
-    req_pkt->params[0].paramf[0] = param1;
-    req_pkt->params[0].paramf[1] = param2;
-    req_pkt->params[0].paramf[2] = param3;
-    req_pkt->params[0].loc[0].opt = dir;
-    req_pkt->params[0].loc[0].x0 = rect.left();
-    req_pkt->params[0].loc[0].y0 = rect.top();
-    req_pkt->params[0].loc[0].x1 = rect.right();
-    req_pkt->params[0].loc[0].y1 = rect.bottom();
-    qInfo("train (%d,%d)_(%d,%d) l=%x dir=%d p1=%f, p2=%f, p3=%f",
+	ReqSearch rs;
+    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
+	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+	rs.req_pkt->prj_file[0] = prj.length();
+	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = CELL_TRAIN;
+	rs.req_pkt->req_search_num = 1;
+	rs.req_pkt->params[0].parami[0] = (int)l0 | ((int)l1 << 8) | ((int)l2 << 16) | ((int)l3 << 24);
+	rs.req_pkt->params[0].parami[1] = 0xffffffff;
+	rs.req_pkt->params[0].paramf[0] = param1;
+	rs.req_pkt->params[0].paramf[1] = param2;
+	rs.req_pkt->params[0].paramf[2] = param3;
+	rs.req_pkt->params[0].loc[0].opt = dir;
+	rs.req_pkt->params[0].loc[0].x0 = rect.left();
+	rs.req_pkt->params[0].loc[0].y0 = rect.top();
+	rs.req_pkt->params[0].loc[0].x1 = rect.right();
+	rs.req_pkt->params[0].loc[0].y1 = rect.bottom();
+	qInfo("train %s (%d,%d)_(%d,%d) l=%x dir=%d p1=%f, p2=%f, p3=%f", prj.c_str(),
           rect.left(), rect.top(), rect.right(), rect.bottom(),
-          req_pkt->params[0].parami[0], dir, param1, param2, param3);
-    rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
-                   RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
-    free(req_pkt);
+		  rs.req_pkt->params[0].parami[0], dir, param1, param2, param3);
+	req_queue.push_back(rs);
+	process_req_queue();
 }
 
-void SearchObject::extract_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
      QSharedPointer<SearchRects> prect, float param1, float param2, float param3)
 {
-    if (!connect_to_server)
-        return;
+	if (prj.length() > 255) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (get_host_name(prj) != prj_host) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
+	ReqSearch rs;
+    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) + (prect->rects.size() -1) * sizeof(Location);
+	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+	rs.req_pkt->prj_file[0] = prj.length();
+	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = CELL_EXTRACT;
+	rs.req_pkt->req_search_num = prect->rects.size();
+	rs.req_pkt->params[0].parami[0] = (int)l0 | ((int)l1 << 8) | ((int)l2 << 16) | ((int)l3 << 24);
+	rs.req_pkt->params[0].parami[1] = 0xffffffff;
+	rs.req_pkt->params[0].paramf[0] = param1;
+	rs.req_pkt->params[0].paramf[1] = param2;
+	rs.req_pkt->params[0].paramf[2] = param3;
 
-     unsigned req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) + (prect->rects.size() -1) * sizeof(Location);
-     ReqSearchPkt * req_pkt = (ReqSearchPkt * ) malloc(req_len);
-     req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
-     req_pkt->command = CELL_EXTRACT;
-     req_pkt->req_search_num = prect->rects.size();
-     req_pkt->params[0].parami[0] = (int) l0 | ((int)l1 << 8) | ((int)l2 << 16) | ((int)l3 << 24);
-     req_pkt->params[0].parami[1] = 0xffffffff;
-     req_pkt->params[0].paramf[0] = param1;
-     req_pkt->params[0].paramf[1] = param2;
-     req_pkt->params[0].paramf[2] = param3;
-
-     for (int i=0; i < (int) prect->rects.size(); i++) {
-         req_pkt->params[0].loc[i].opt = prect->dir[i];
-         req_pkt->params[0].loc[i].x0 = prect->rects[i].left();
-         req_pkt->params[0].loc[i].y0 = prect->rects[i].top();
-         req_pkt->params[0].loc[i].x1 = prect->rects[i].right();
-         req_pkt->params[0].loc[i].y1 = prect->rects[i].bottom();
-         qInfo("extract (%d,%d)_(%d,%d) l=%x dir=%d p1=%f, p2=%f, p3=%f",
-               prect->rects[i].left(), prect->rects[i].top(),
-               prect->rects[i].right(), prect->rects[i].bottom(),
-               req_pkt->params[0].parami[0], prect->dir[i], param1, param2, param3);
-     }
-     rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
-                    RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
-     free(req_pkt);
+	qInfo("extract cell %s", prj.c_str());
+    for (int i=0; i < (int) prect->rects.size(); i++) {
+		rs.req_pkt->params[0].loc[i].opt = prect->dir[i];
+		rs.req_pkt->params[0].loc[i].x0 = prect->rects[i].left();
+		rs.req_pkt->params[0].loc[i].y0 = prect->rects[i].top();
+		rs.req_pkt->params[0].loc[i].x1 = prect->rects[i].right();
+		rs.req_pkt->params[0].loc[i].y1 = prect->rects[i].bottom();
+        qInfo("(%d,%d)_(%d,%d) l=%x dir=%d p1=%f, p2=%f, p3=%f",
+              prect->rects[i].left(), prect->rects[i].top(),
+              prect->rects[i].right(), prect->rects[i].bottom(),
+              rs.req_pkt->params[0].parami[0], prect->dir[i], param1, param2, param3);
+    }
+	req_queue.push_back(rs);
+	process_req_queue();
 }
 
-void SearchObject::extract_wire_via(QSharedPointer<VWSearchRequest> preq, const QRect rect)
+void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect)
 {
-    unsigned req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * preq->lpa.size();
-    ReqSearchPkt * req_pkt = (ReqSearchPkt * ) malloc(req_len);
-    req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
-    req_pkt->command = VW_EXTRACT;
-    req_pkt->req_search_num = preq->lpa.size();
-    ReqSearchParam * pa = &(req_pkt->params[0]);
+	if (prj.length() > 255) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (get_host_name(prj) != prj_host) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
+	ReqSearch rs;
+    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * preq->lpa.size();
+	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+	rs.req_pkt->prj_file[0] = prj.length();
+	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = VW_EXTRACT;
+	rs.req_pkt->req_search_num = preq->lpa.size();
+	ReqSearchParam * pa = &(rs.req_pkt->params[0]);
     pa[0].loc[0].x0 = rect.left();
     pa[0].loc[0].y0 = rect.top();
     pa[0].loc[0].x1 = rect.right();
     pa[0].loc[0].y1 = rect.bottom();
+
+	qInfo("extract wire_via %s", prj.c_str());
     for (int l=0; l<preq->lpa.size(); l++) {
         pa[l].parami[0] = preq->lpa[l].layer;
         pa[l].parami[1] = preq->lpa[l].wire_wd;
@@ -112,27 +343,62 @@ void SearchObject::extract_wire_via(QSharedPointer<VWSearchRequest> preq, const 
         pa[l].paramf[1] = preq->lpa[l].param2;
         pa[l].paramf[2] = preq->lpa[l].param3;
         pa[l].paramf[3] = preq->lpa[l].param4;
-        qInfo("extract l=%d, wd=%d, vr=%d, gd=%d, rule=%x, wrule=%x, p1=%f, p2=%f, p3=%f, p4=%f",
+        qInfo("l=%d, wd=%d, vr=%d, gd=%d, rule=%x, wrule=%x, p1=%f, p2=%f, p3=%f, p4=%f",
               pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
               pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
     }
-    rak_peer->Send((char *)req_pkt, req_len, HIGH_PRIORITY,
-                   RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
-    free(req_pkt);
+	req_queue.push_back(rs);
+	process_req_queue();
 }
 
-void SearchObject::search_packet_arrive(void * p)
+void SearchObject::server_connected(QSharedPointer<RakNet::Packet> packet)
 {
-    RakNet::Packet *packet = (RakNet::Packet *) p;
-    RspSearchPkt * rsp_pkt = (RspSearchPkt *) packet->data;
-    SearchResults * prst = new SearchResults;
+	if (packet->systemAddress == server_addr) {
+		switch (packet->data[0]) {
+		case ID_CONNECTION_REQUEST_ACCEPTED:
+		case ID_ALREADY_CONNECTED:
+			if (token != 0)
+				qCritical("Already connected, why receive ID_CONNECTION_REQUEST_ACCEPTED again");
+			else {
+				token = global_token++;
+				emit server_found();
+				qInfo("Connect to server, toke=%d", token);
+				process_req_queue();
+			}
+			break;
+		case ID_CONNECTION_ATTEMPT_FAILED:
+		case ID_NO_FREE_INCOMING_CONNECTIONS:
+			if (try_server(false) < 0)
+				req_queue.clear();
+			break;
+		}
+	}
+}
 
+void SearchObject::server_disconnected(QSharedPointer<RakNet::Packet> packet)
+{
+	if (packet->systemAddress == server_addr) {
+		if (try_server(true) < 0)
+			req_queue.clear();
+	}
+}
+
+void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
+{    
+    RspSearchPkt * rsp_pkt = (RspSearchPkt *) packet->data;	
+	if (rsp_pkt->token != token)
+		return;
+	if (packet->systemAddress != server_addr) {
+		qCritical("Search result receive from unexcepted server:%s, excepted server:%s",
+			packet->systemAddress.ToString(), server_addr.ToString());
+		return;
+	}
     if (packet->length != sizeof(RspSearchPkt) + rsp_pkt->rsp_search_num * sizeof(Location)) {
-        qCritical("Response %d length error!", rsp_pkt->command);
-        rak_peer->DeallocatePacket(packet);
+        qCritical("Response %d length error!", rsp_pkt->command);        
         return;
     }
 
+	SearchResults * prst = new SearchResults;
     switch (rsp_pkt->command) {
     case CELL_EXTRACT:
         for (unsigned i = 0; i < rsp_pkt->rsp_search_num; i++) {
@@ -174,6 +440,5 @@ void SearchObject::search_packet_arrive(void * p)
     default:
         qCritical("Response command error %d!", rsp_pkt->command);
     }
-
-    rak_peer->DeallocatePacket(packet);
+	process_req_queue();
 }

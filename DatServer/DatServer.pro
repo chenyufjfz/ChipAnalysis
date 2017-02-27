@@ -12,11 +12,11 @@ LIBS += -L$$_PRO_FILE_PWD_/../lib
 
 CONFIG(debug, debug|release) {
 TARGET = DatServerd
-LIBS += -L$$_PRO_FILE_PWD_/../lib/debug -lVWExtractd
+LIBS += -L$$_PRO_FILE_PWD_/../lib/debug -lVWExtractd -lICLayerd
 INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/debug/
 } else {
 TARGET = DatServer
-LIBS += -L$$_PRO_FILE_PWD_/../lib/release -lVWExtract
+LIBS += -L$$_PRO_FILE_PWD_/../lib/release -lVWExtract -lICLayer
 INCLUDEPATH += $$_PRO_FILE_PWD_/../cvinclude/release/
 }
 
@@ -29,19 +29,18 @@ win32:LIBS += -lWs2_32 -ladvapi32
 SOURCES += main.cpp\
         serverwindow.cpp \
     serverthread.cpp \
-    iclayer.cpp \
     serverperclient.cpp \
     cellextract.cpp
 
 HEADERS  += serverwindow.h \
     serverthread.h \
     communication.hpp \
-    iclayer.h \
     serverperclient.h \
     cellextract.h \
     objextract.h \
     markobj.h \
-    vwextract.h
+    vwextract.h \
+    iclayer.h
 
 FORMS    += serverwindow.ui
 DESTDIR = $$_PRO_FILE_PWD_/../app

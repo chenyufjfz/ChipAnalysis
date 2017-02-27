@@ -4,12 +4,20 @@
 #include <stdlib.h>
 #include "RakSleep.h"
 #include "RakNetStatistics.h"
-#include "GetTime.h"
 #include "communication.hpp"
 
 RakNet::RakPeerInterface *rak_peer = NULL;
 
-RakNet::TimeMS last_printtime;
+static void packet_del(RakNet::Packet * packet)
+{
+	switch (packet->data[0])
+	{
+	case ID_REQUIRE_OBJ_SEARCH:
+		qDebug("Delete obj search request packet");
+		break;
+	}
+	rak_peer->DeallocatePacket(packet);
+}
 
 ServerThread::ServerThread() :QThread(NULL)
 {
@@ -36,19 +44,7 @@ void ServerThread::run()
     rak_peer->SetMaximumIncomingConnections(max_user);
     rak_peer->SetPerConnectionOutgoingBandwidthLimit(10000000);
     last_printtime = RakNet::GetTimeMS();
-#ifndef WIN64
-    imgdb.add_new_layer("../../PL.dat");
-    imgdb.add_new_layer("../../M1.dat");
-    imgdb.add_new_layer("../../M2.dat");
-    imgdb.add_new_layer("../../M3.dat");
-    imgdb.add_new_layer("../../M4.dat");
-#else    
-    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/PL.dat");
-    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M1.dat");
-    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M2.dat");
-    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M3.dat");
-    imgdb.add_new_layer("F:/chenyu/work/ChipStitch/data/hanzhou/M1/M4.dat");
-#endif
+
     while (!finish)
     {
         for (packet=rak_peer->Receive(); packet; packet=rak_peer->Receive())
@@ -69,45 +65,31 @@ void ServerThread::run()
                     qWarning("Raknet internal error, new connect already have server");
                     delete server;
                 }
-                server = new ServerPerClient;
+				server = new ServerPerClient(packet->systemAddress);
                 server_pools[packet->guid.g] = server;
                 break;
-            case ID_DISCONNECTION_NOTIFICATION:
-                qInfo("Client %s disconnected.", packet->systemAddress.ToString());
-                if (server!=NULL)
-                    delete server;
+            case ID_DISCONNECTION_NOTIFICATION:                
+				if (server != NULL)
+					delete server;
+				else
+					qCritical("Unfound server for client %s when receive disconnect", packet->systemAddress.ToString());
+				qInfo("Client %s disconnected.", packet->systemAddress.ToString());
                 server_pools.erase(packet->guid.g);
                 break;
             case ID_CONNECTION_LOST:
                 qInfo("Lost connection to Client %s.", packet->systemAddress.ToString());
                 if (server!=NULL)
                     delete server;
+				else
+					qCritical("Unfound server for client %s when receive lost connection", packet->systemAddress.ToString());
                 server_pools.erase(packet->guid.g);
                 break;
 
-            case ID_REQUIRE_IMG_INFO:
-                RspImgInfoPkt rsp_info;
-                 int num_wide, num_high;
-                rsp_info.typeId = ID_RESPONSE_IMG_INFO;
-                rsp_info.img_block_h = imgdb.get_layer(0)->getBlockWidth();
-                rsp_info.img_block_w = imgdb.get_layer(0)->getBlockWidth();
-                imgdb.get_layer(0)->getBlockNum(num_wide, num_high);
-                rsp_info.num_block_x = num_wide;
-                rsp_info.num_block_y = num_high;
-                rsp_info.num_layer = imgdb.get_layer_num();
-                server->prepare(&imgdb, packet->systemAddress);
-                qInfo("Send bg_img info l=%d,w=%d,h=%d, (%d*%d)", rsp_info.num_layer, rsp_info.num_block_x,
-                      rsp_info.num_block_y, rsp_info.img_block_h, rsp_info.img_block_w);
-                rak_peer->Send((char*) &rsp_info, sizeof(RspImgInfoPkt), IMMEDIATE_PRIORITY,
-                    RELIABLE_ORDERED, BKIMAGE_STREAM, packet->systemAddress, false);
-                break;
-
-            case ID_REQUIRE_BG_IMG:
             case ID_REQUIRE_OBJ_SEARCH:
                 need_delete=false;
                 if (server == NULL)
                     qFatal("Connected Client can't find ServerPerClient");
-                server->handle_client_req(packet);
+				server->handle_client_req(QSharedPointer<RakNet::Packet>(packet, packet_del));
                 break;
 
             default:
@@ -117,9 +99,9 @@ void ServerThread::run()
             if (need_delete)
                 rak_peer->DeallocatePacket(packet);
         }
-        RakSleep(5);
+        RakSleep(10);
         RakNet::TimeMS current_time = RakNet::GetTimeMS();
-        if (current_time -last_printtime>=8000){
+        if (current_time -last_printtime>=60000){
             last_printtime = current_time;
             char text[2048];
             RakNet::RakNetStatistics rss;
@@ -130,7 +112,6 @@ void ServerThread::run()
             }
         }
     }
-
-
+	
     RakNet::RakPeerInterface::DestroyInstance(rak_peer);
 }

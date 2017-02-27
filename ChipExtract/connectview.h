@@ -9,7 +9,7 @@
 #include "objectdb.h"
 
 enum {
-    CREATE_NEW,
+    CREATE_NEW_OBJ,
     CHOOSE_ANO_POINT,
     SELECT_EXIST
 };
@@ -24,21 +24,21 @@ class ConnectView : public QWidget
 {
     Q_OBJECT
 public:
-    explicit ConnectView(QWidget *parent = 0);
+    explicit ConnectView(const char * prj_name = 0, QWidget *parent = 0);
 
 signals:
-    void render_bkimg(const unsigned char layer, const QRect rect,
+	void render_bkimg(string prj, const unsigned char layer, const QRect rect,
                       const QSize screen, RenderType rt, const QObject * view, bool preload_enable);
-    void train_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+    void train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
-    void extract_cell(unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
-    void extract_wire_via(QSharedPointer<VWSearchRequest> preq, const QRect rect);
+	void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect);
     void mouse_change(QPoint pos, QString msg);
 
 public slots:
-    void server_connected();
-    void server_disconnected();
+	void server_connected();
+	void server_disconnected();
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
                            QImage image, bool finish, const QObject * view);
     void extract_cell_done(QSharedPointer<SearchResults> prst);
@@ -50,6 +50,8 @@ public:
     void load_objects(string file_name);
     void set_mark(unsigned char type, unsigned char type2);
     void clear_objs();
+	void set_prj_file(string _prj_file);
+	string get_prj_file();
 
 protected:
     void draw_obj(ElementObj & obj, QPainter &painter);
@@ -61,7 +63,6 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event);
 
 protected:
-    bool connect_to_server;
     bool hide_element;
     MarkState ms;
 	QImage render_img;
@@ -69,6 +70,8 @@ protected:
     QPoint center;
     double scale;
     unsigned char bk_layer, render_bk_layer;
+	PrjConst *pcst;
+	string prj_file;
 };
 
 #endif // CONNECTVIEW_H

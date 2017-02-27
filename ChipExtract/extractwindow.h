@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QThread>
 #include <QLabel>
+#include <QStackedWidget>
 #include "renderimage.h"
 #include "connectview.h"
 #include "paramdialog.h"
@@ -34,14 +35,25 @@ private slots:
 
     void on_actionClear_Objects_triggered();
 
+    void on_actionMonkeyTest_triggered();
+
+    void on_actionNew_View_triggered();
+
+    void on_actionClose_View_triggered();
+
+    void on_actionNext_View_triggered();
+
 private:
     ParamDialog param_dlg;
     QLabel *status_label;
-    QThread * render_thread;
-    RenderImage * render_image;
-    SearchObject * search_object;
-    ConnectView * connect_view;
     Ui::MainWindow *ui;
+
+protected:
+	void timerEvent(QTimerEvent *e);
+	int monkey_test_id;
+
+protected:
+	QStackedWidget views;
 };
 
 #endif // EXTRACTWINDOW_H

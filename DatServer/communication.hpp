@@ -12,55 +12,20 @@
 typedef unsigned long long CHECKSUM_TYPE;
 enum GameMessages
 {
-    ID_REQUIRE_BG_IMG = ID_USER_PACKET_ENUM,
-    ID_RESPONSE_BG_IMG = ID_USER_PACKET_ENUM + 1,
-    ID_REQUIRE_IMG_INFO = ID_USER_PACKET_ENUM + 2,
-    ID_RESPONSE_IMG_INFO = ID_USER_PACKET_ENUM + 3,
-    ID_REQUIRE_OBJ_SEARCH = ID_USER_PACKET_ENUM + 4,
-    ID_RESPONSE_OBJ_SEARCH = ID_USER_PACKET_ENUM + 5
+    ID_REQUIRE_OBJ_SEARCH = ID_USER_PACKET_ENUM,
+    ID_RESPONSE_OBJ_SEARCH = ID_USER_PACKET_ENUM + 1
 };
 
 enum SEARCH_COMMAND
 {
     CELL_TRAIN,
     CELL_EXTRACT,
-    VW_EXTRACT
+    VW_EXTRACT,
+	SHUT_DOWN
 };
 
 #pragma pack(push)
 #pragma pack(1)
-typedef struct {
-    unsigned char typeId;
-    unsigned char scale;
-    unsigned char layer;
-    unsigned char priority;
-    unsigned short x, y;    
-} ReqBkImgPkt;
-
-typedef struct {
-    unsigned char typeId;
-    unsigned char scale;
-    unsigned short x, y;
-    unsigned int len;
-    unsigned char layer;
-#if ENABLE_CHECK_SUM_BKIMG & ENABLE_CHECK_SUM
-    CHECKSUM_TYPE check_sum;
-#endif
-} RspBkImgPkt;
-
-typedef struct {
-    unsigned char typeId;
-} ReqImgInfoPkt;
-
-typedef struct {
-    unsigned char typeId;
-    int img_block_w;
-    int img_block_h;
-    int num_block_x;
-    int num_block_y;
-    int num_layer;
-} RspImgInfoPkt;
-
 typedef struct {
     unsigned short opt;
     int x0, y0;
@@ -74,9 +39,11 @@ typedef struct {
     Location loc[1];
 } ReqSearchParam;
 
-typedef struct {
+typedef struct {	
     unsigned char typeId;
     unsigned char command;
+	char prj_file[256];
+	unsigned int token;
     unsigned short req_search_num;
     ReqSearchParam params[0];
 } ReqSearchPkt;
@@ -84,6 +51,7 @@ typedef struct {
 typedef struct {
     unsigned char typeId;
     unsigned char command;
+	unsigned int token;
     unsigned rsp_search_num;
     Location result[0];
 } RspSearchPkt;

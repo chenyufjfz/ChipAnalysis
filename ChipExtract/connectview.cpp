@@ -1,24 +1,24 @@
 #include "connectview.h"
 #include <QPainter>
-#include "globalconst.h"
 #include <QMessageBox>
 
-extern GlobalConst gcst;
 extern ObjectDB odb;
 //following parameter is for view_rect move
 const int step_para =3;
 const double min_scale = 0.03125;
-const double max_scale = 16;
+const double max_scale = 128;
 
-ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
+ConnectView::ConnectView(const char * prj_name, QWidget *parent) : QWidget(parent)
 {    
     scale = 1;
     resize(600, 600);
     center = QPoint(1450000,600000);
     bk_layer = 0;
     render_bk_layer = 0;
-    connect_to_server = false;
     hide_element = false;
+	pcst = RenderImage::register_new_window(this);
+	SearchObject::register_new_window(this);
+	prj_file = prj_name;
     ms.state = SELECT_EXIST;
     setAutoFillBackground(false);
     setAttribute( Qt::WA_OpaquePaintEvent, true );
@@ -34,6 +34,20 @@ ConnectView::ConnectView(QWidget *parent) : QWidget(parent)
     obj.p1 = QPoint(1504560, 655000);
     odb.add_object(obj);
 #endif
+}
+
+void ConnectView::set_prj_file(string _prj_file)
+{
+	prj_file = _prj_file;
+	view_rect = QRect(0, 0, 128, 128);
+	bk_layer = 0;
+	render_bk_layer = 255;
+	emit render_bkimg(prj_file, bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
+}
+
+string ConnectView::get_prj_file()
+{
+	return prj_file;
 }
 
 void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
@@ -141,46 +155,53 @@ void ConnectView::paintEvent(QPaintEvent *)
 {
     QPoint ce(size().width()*scale/2, size().height()*scale/2);
     QSize s(size().width()*scale, size().height()*scale);
-    view_rect = QRect(center - gcst.pixel2bu(ce), gcst.pixel2bu(s));
-    if (view_rect.width() > gcst.tot_width_bu())
-        view_rect.adjust(view_rect.width()-gcst.tot_width_bu(), 0, 0, 0);
-    if (view_rect.height() > gcst.tot_height_bu())
-        view_rect.adjust(0, view_rect.height()-gcst.tot_height_bu(), 0, 0);
-    if (view_rect.left() < gcst.left_bound())
-        view_rect.moveLeft(gcst.left_bound());
-    if (view_rect.right() > gcst.right_bound())
-        view_rect.moveRight(gcst.right_bound());
-    if (view_rect.top() < gcst.top_bound())
-        view_rect.moveTop(gcst.top_bound());
-    if (view_rect.bottom() > gcst.bottom_bound())
-        view_rect.moveBottom(gcst.bottom_bound());
-    Q_ASSERT(view_rect.left()>=gcst.left_bound() && view_rect.right()<=gcst.right_bound() &&
-             view_rect.top()>=gcst.top_bound() && view_rect.bottom()<=gcst.bottom_bound());
-
+	if (pcst->num_layer() == 0) {//prj is not opened yet, hard code view_rect, bk_layer to force open prj file
+		view_rect = QRect(0, 0, 128, 128);
+		bk_layer = 0;
+		render_bk_layer = 255;
+	}
+	else {
+		view_rect = QRect(center - pcst->pixel2bu(ce), pcst->pixel2bu(s));
+		if (view_rect.width() > pcst->tot_width_bu())
+			view_rect.adjust(view_rect.width() - pcst->tot_width_bu(), 0, 0, 0);
+		if (view_rect.height() > pcst->tot_height_bu())
+			view_rect.adjust(0, view_rect.height() - pcst->tot_height_bu(), 0, 0);
+		if (view_rect.left() < pcst->left_bound())
+			view_rect.moveLeft(pcst->left_bound());
+		if (view_rect.right() > pcst->right_bound())
+			view_rect.moveRight(pcst->right_bound());
+		if (view_rect.top() < pcst->top_bound())
+			view_rect.moveTop(pcst->top_bound());
+		if (view_rect.bottom() > pcst->bottom_bound())
+			view_rect.moveBottom(pcst->bottom_bound());
+		Q_ASSERT(view_rect.left() >= pcst->left_bound() && view_rect.right() <= pcst->right_bound() &&
+			view_rect.top() >= pcst->top_bound() && view_rect.bottom() <= pcst->bottom_bound());
+	}
     if (!render_rect.contains(view_rect) || render_bk_layer !=bk_layer) {
         qDebug("request image l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
-               view_rect.right(), view_rect.bottom(), size().width(), size().height());
-        emit render_bkimg(bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
+               view_rect.width(), view_rect.height(), size().width(), size().height());
+        emit render_bkimg(prj_file, bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
         return;
     }
 
-    if ((render_rect.width() > view_rect.width() * 3 && render_rect.width() > 0x10000) ||
-        (render_rect.height() > view_rect.height() * 3 && render_rect.height() > 0x10000)) {
+	if ((render_rect.width() > view_rect.width() * 3 && view_rect.width() >= view_rect.height() && render_rect.width() > 0x18000) ||
+		(render_rect.height() > view_rect.height() * 3 && view_rect.width() < view_rect.height() && render_rect.height() > 0x18000)) {
         qDebug("request clear image l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
-               view_rect.right(), view_rect.bottom(), size().width(), size().height());
-        emit render_bkimg(bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
+               view_rect.width(), view_rect.height(), size().width(), size().height());
+		emit render_bkimg(prj_file, bk_layer, view_rect, size(), RETURN_WHEN_PART_READY, this, true);
     }
     QPainter painter(this);
 
-    QRect source(render_img.width() * (view_rect.left() - render_rect.left()) / render_rect.width(),
-                 render_img.height()* (view_rect.top() - render_rect.top()) /render_rect.height(),
-                 render_img.width() * view_rect.width() /render_rect.width(),
-                 render_img.height()* view_rect.height() /render_rect.height());
+    QRect source((double) render_img.width() * (view_rect.left() - render_rect.left()) / render_rect.width(),
+                 (double) render_img.height()* (view_rect.top() - render_rect.top()) /render_rect.height(),
+                 (double) render_img.width() * view_rect.width() /render_rect.width(),
+                 (double) render_img.height()* view_rect.height() /render_rect.height());
     painter.drawImage(QRect(0,0, width(), height()), render_img, source);
     if (!hide_element)
         draw_element(painter);
-    qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d), source=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
-           view_rect.right(), view_rect.bottom(), size().width(), size().height(), source.width(), source.height());
+    qDebug("New image position l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d), source=(%d,%d,%d,%d)", bk_layer, 
+		view_rect.left(), view_rect.top(), view_rect.width(), view_rect.height(), 
+		size().width(), size().height(), source.left(), source.top(), source.width(), source.height());
 }
 
 void ConnectView::keyPressEvent(QKeyEvent *e)
@@ -189,22 +210,22 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
     switch (e->key()) {
     case Qt::Key_Left:
         step = view_rect.width() * step_para /10;
-        view_rect.moveLeft(max(gcst.left_bound(), view_rect.left() - step));
+        view_rect.moveLeft(max(pcst->left_bound(), view_rect.left() - step));
         center = view_rect.center();
         break;
     case Qt::Key_Up:
         step = view_rect.height() * step_para /10;
-        view_rect.moveTop(max(gcst.top_bound(), view_rect.top() - step));
+		view_rect.moveTop(max(pcst->top_bound(), view_rect.top() - step));
         center = view_rect.center();
         break;
     case Qt::Key_Right:
         step = view_rect.width() * step_para /10;
-        view_rect.moveRight(min(gcst.right_bound(), view_rect.right() + step));
+		view_rect.moveRight(min(pcst->right_bound(), view_rect.right() + step));
         center = view_rect.center();
         break;
     case Qt::Key_Down:
         step = view_rect.height() * step_para /10;
-        view_rect.moveBottom(min(gcst.bottom_bound(), view_rect.bottom() + step));
+		view_rect.moveBottom(min(pcst->bottom_bound(), view_rect.bottom() + step));
         center = view_rect.center();
         break;
     case Qt::Key_PageUp:
@@ -219,39 +240,39 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
         bk_layer = 0;
         break;
     case Qt::Key_1:
-        if (gcst.num_layer() > 1)
+        if (pcst->num_layer() > 1)
             bk_layer = 1;
         break;
     case Qt::Key_2:
-        if (gcst.num_layer() > 2)
+		if (pcst->num_layer() > 2)
             bk_layer = 2;
         break;
     case Qt::Key_3:
-        if (gcst.num_layer() > 3)
+        if (pcst->num_layer() > 3)
             bk_layer = 3;
         break;
     case Qt::Key_4:
-        if (gcst.num_layer() > 4)
+        if (pcst->num_layer() > 4)
             bk_layer = 4;
         break;
     case Qt::Key_5:
-        if (gcst.num_layer() > 5)
+        if (pcst->num_layer() > 5)
             bk_layer = 5;
         break;
     case Qt::Key_6:
-        if (gcst.num_layer() > 6)
+		if (pcst->num_layer() > 6)
             bk_layer = 6;
         break;
     case Qt::Key_7:
-        if (gcst.num_layer() > 7)
+		if (pcst->num_layer() > 7)
             bk_layer = 7;
         break;
     case Qt::Key_8:
-        if (gcst.num_layer() > 8)
+        if (pcst->num_layer() > 8)
             bk_layer = 8;
         break;
     case Qt::Key_9:
-        if (gcst.num_layer() > 9)
+        if (pcst->num_layer() > 9)
             bk_layer = 9;
         break;
     case Qt::Key_H:
@@ -277,7 +298,7 @@ void ConnectView::load_objects(string file_name)
 
 void ConnectView::set_mark(unsigned char type, unsigned char type2)
 {
-    ms.state = CREATE_NEW;
+    ms.state = CREATE_NEW_OBJ;
     ms.type = type;
     ms.type2 = type2;
     setFocus();
@@ -291,7 +312,7 @@ void ConnectView::clear_objs()
 
 void ConnectView::mouseMoveEvent(QMouseEvent *event)
 {
-    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    QPoint mp = pcst->pixel2bu(event->pos() * scale) + view_rect.topLeft();
     char s[200] = "";
     if (ms.state == CHOOSE_ANO_POINT) {
         ms.draw_obj.p1 = mp;
@@ -302,8 +323,8 @@ void ConnectView::mouseMoveEvent(QMouseEvent *event)
 
 void ConnectView::mousePressEvent(QMouseEvent *event)
 {
-    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
-    if (ms.state == CREATE_NEW) {
+    QPoint mp = pcst->pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    if (ms.state == CREATE_NEW_OBJ) {
         ms.draw_obj.type = ms.type;
         ms.draw_obj.type2 = ms.type2;
         ms.draw_obj.type3 = bk_layer;
@@ -314,25 +335,21 @@ void ConnectView::mousePressEvent(QMouseEvent *event)
 
 void ConnectView::mouseReleaseEvent(QMouseEvent *event)
 {
-    QPoint mp = gcst.pixel2bu(event->pos() * scale) + view_rect.topLeft();
+    QPoint mp = pcst->pixel2bu(event->pos() * scale) + view_rect.topLeft();
     if (ms.state == CHOOSE_ANO_POINT) {
         ms.draw_obj.p1 = mp;
         odb.add_object(ms.draw_obj);
-        ms.state = CREATE_NEW;
+        ms.state = CREATE_NEW_OBJ;
         update();
     }
 }
 
 void ConnectView::server_connected()
 {
-    connect_to_server = true;
-    render_rect = QRect(0,0,0,0);
-    update();
 }
 
 void ConnectView::server_disconnected()
 {
-    connect_to_server = false;
 }
 
 void ConnectView::render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
@@ -345,8 +362,8 @@ void ConnectView::render_bkimg_done(const unsigned char layer, const QRect rect,
         qWarning("update view receive obsolete image");
         return;
     } else
-        qDebug("render image l=%d,(%d,%d,%d,%d), im=(%d,%d)", layer,
-               rect.left(), rect.top(),rect.right(), rect.bottom(), image.size().width(), image.size().height());
+        qDebug("render image done, l=%d,(%d,%d,%d,%d), im=(%d,%d)", layer,
+		rect.left(), rect.top(), rect.width(), rect.height(), image.size().width(), image.size().height());
     render_rect = rect;
     render_img = image;
     render_bk_layer = layer;
@@ -383,10 +400,10 @@ void ConnectView::train(bool cell_train, int i1, int i2, int i3, int i4, float f
         QPoint p0(1551572, 255590), p1(1565716, 259494);
         //emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
         vector<ElementObj*> tr;
-        odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, gcst.bound_rect_bu(), tr);
+        odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, pcst->bound_rect_bu(), tr);
         p0 = tr[0]->p0;
         p1 = tr[0]->p1;
-        emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+        emit train_cell(prj_file, 1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
     }    
 }
 
@@ -399,11 +416,11 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         //sr->rects.push_back(QRect(1300000, 200000, 500000, 500000));
         //emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
         vector<ElementObj*> er;
-        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, gcst.bound_rect_bu(), er);
+        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
         QPoint p0 = er[0]->p0;
         QPoint p1 = er[0]->p1;
         sr->rects.push_back(QRect(p0, p1));
-        emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+        emit extract_cell(prj_file, 1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
     } else {
         qInfo("Accept wire extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
         VWSearchRequest * preq = new VWSearchRequest;
@@ -423,9 +440,9 @@ void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float
         //QRect(1450000, 586000, 65536, 65536)
         //emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 600000, 65536, 65536));
         vector<ElementObj*> er;
-        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, gcst.bound_rect_bu(), er);
+        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
         QPoint p0 = er[0]->p0;
         QPoint p1 = er[0]->p1;
-        emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
+        emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
     }
 }

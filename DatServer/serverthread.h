@@ -2,6 +2,7 @@
 #define SERVERTHREAD_H
 #include <QThread>
 #include "serverperclient.h"
+#include "GetTime.h"
 #include <map>
 
 class ServerThread : public QThread
@@ -16,9 +17,9 @@ protected:
     bool finish;
     int server_port;
     int max_user;
-    BkImgDB imgdb;
     map<unsigned long long, ServerPerClient*> server_pools;
     void run() Q_DECL_OVERRIDE;
+	RakNet::TimeMS last_printtime;
 };
 
 #endif // SERVERTHREAD_H

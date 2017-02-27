@@ -1,12 +1,11 @@
 #ifndef RENDERIMAGE_H
 #define RENDERIMAGE_H
-#include "communication.hpp"
-#include "GetTime.h"
+#include "iclayer.h"
 #include <QImage>
 #include <QRect>
-#include <vector>
-#include <map>
 #include <list>
+#include <map>
+#include <QThread>
 using namespace std;
 
 typedef unsigned long long MapID;
@@ -18,79 +17,98 @@ typedef enum {
     NO_NEED_RETURN			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
 } RenderType;
 
-typedef struct {
-    list <MapID>::iterator plist;
-    unsigned char * data;
-    unsigned int len;
-} Bkimg;
+class PrjConst
+{	
+public:
+	friend class RenderImage;
+	PrjConst();
+	int img_block_w() const; //server side image width in pixel
+	int img_block_h() const; //server side image height in pixel
+	int num_block_x() const; //server side image num in row
+	int num_block_y() const; //server side image num in column
+	int num_layer() const;
+	int max_scale() const;
+	double pixel_bu() const;
+	int left_bound() const; //return in bu
+	int right_bound() const; //return in bu
+	int top_bound() const; //return in bu
+	int bottom_bound() const; //return in bu
+	int tot_width_bu() const; //return in bu
+	int tot_height_bu() const; //return in bu
+	int tot_width_pixel() const; //return in bu
+	int tot_height_pixel() const; //return in bu
+	QRect bound_rect_bu() const; //return bound rect
+	QRect bu2pixel(const QRect &r) const; //r in bu, return in pixel
+	QRect pixel2bu(const QRect &r) const; //r in pixelm return in bu
+	QPoint bu2pixel(const QPoint &r) const; //r in bu, return in pixel
+	QPoint pixel2bu(const QPoint &r) const; //r in pixelm return in bu
+	QSize bu2pixel(const QSize &r) const; //r in bu, return in pixel
+	QSize pixel2bu(const QSize &r) const; //r in pixelm return in bu
 
-typedef struct {
-    unsigned char layer; //changed when render request
-    QRect rect; //changed when render request
-    QSize screen; //changed when render request
-    RenderType rt; //changed when render request
-    list <MapID> load_queue; //changed when render request
-    list <MapID> preload_queue; //changed when render request
-    RakNet::TimeMS last_render_time;  //changed when render request
-    list <MapID>::iterator rrp_load; //used by send packet
-    bool update;  //indicate if load_queue filled by receive packet
-    map <MapID, unsigned int> preimg_map;
-    int prev_w, prev_h;
-    QImage pre_img; //if possible use previous image to save decode time
-} RenderRequest;
-
+protected:
+	int _img_block_w;
+	int _img_block_h;
+	int _num_block_x;
+	int _num_block_y;
+	int _num_layer;
+	int _max_scale;
+	int x0, y0;
+	double _pixel_bu; // 1 pixel length / 1 basic unit
+	void set(int img_block_w, int img_block_h, int num_block_x, int num_block_y, int num_layer, int max_scale);
+	void reset();
+};
 
 class RenderImage : public QObject
 {
     Q_OBJECT
 public:
     explicit RenderImage(QObject *parent = 0);
-    static MapID sxy2mapid(unsigned char layer, unsigned char scale, unsigned short x, unsigned short y) {
-        MapID ret;
-        ret = layer;
-        ret = ret <<8;
-        ret |= scale;
-        ret = ret <<16;
-        ret |= x;
-        ret = ret <<16;
-        ret |= y;
-        return ret;
-    }
-
-    static void mapid2sxy(MapID m, unsigned char &layer, unsigned char & scale, unsigned short & x, unsigned short &y)
-    {
-        layer = (m >>40) & 0xff;
-        scale = (m >>32) & 0xff;
-        x = (m>>16) & 0xffff;
-        y = m & 0xffff;
-    }
+	~RenderImage();	
+	static PrjConst * register_new_window(QObject * pobj);
 
 signals:
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
                            QImage image, bool finish, const QObject * view);
 
 public slots:
-    void server_connected();
-    void server_disconnected();
-    void bkimg_packet_arrive(void * p);
-    void render_bkimg(const unsigned char layer, const QRect rect,
+    void render_bkimg(string prj, const unsigned char layer, const QRect rect,
                       const QSize screen, RenderType rt, const QObject * view, bool preload_enable);
 
 protected:
-    void timerEvent( QTimerEvent *event );
-    void send_server_req(const QObject * view);
-    void remove_cache_list(unsigned char scale);
+	static bool inited;
+	static MapID sxy2mapid(unsigned char layer, unsigned char scale, unsigned short x, unsigned short y) {
+		MapID ret;
+		ret = layer;
+		ret = ret << 8;
+		ret |= scale;
+		ret = ret << 16;
+		ret |= x;
+		ret = ret << 16;
+		ret |= y;
+		return ret;
+	}
+
+	static void mapid2sxy(MapID m, unsigned char &layer, unsigned char & scale, unsigned short & x, unsigned short &y)
+	{
+		layer = (m >> 40) & 0xff;
+		scale = (m >> 32) & 0xff;
+		x = (m >> 16) & 0xffff;
+		y = m & 0xffff;
+	}
 
 protected:
-    bool call_from_packet_arrivce, connect_to_server;
-    int self_test, timer_id;
-	//each view's request is in RenderRequest's load_queue and preload_queue, 
-	//if req_pkt_queue is within threshold, load_queue and preload_queue is add to req_pkt_queue
-    map<MapID, RakNet::TimeMS> req_pkt_queue; 
-    int req_score, max_score;
-    list <MapID> cache_list[IMAGE_MAX_SCALE]; //cache_list and cache_map makes back_image local cache
-    map<MapID, Bkimg> cache_map;
-    map<const QObject *, RenderRequest> view_request;
+	struct PrevImg {
+		MapID id;
+		QImage img;
+		PrevImg(MapID _id, QImage _img) {
+			id = _id;
+			img = _img;
+		}
+	};
+	QSharedPointer<BkImgInterface> bk_img;
+	QImage prev_img;
+	map <MapID, unsigned int> preimg_map;
+	PrjConst prj_cnst;
 };
 
 #endif // RENDERIMAGE_H

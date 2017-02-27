@@ -35,7 +35,23 @@
     <addaction name="actionLoad_Objects"/>
     <addaction name="actionClear_Objects"/>
    </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionMonkeyTest"/>
+   </widget>
+   <widget class="QMenu" name="menuProject">
+    <property name="title">
+     <string>Window</string>
+    </property>
+    <addaction name="actionNew_View"/>
+    <addaction name="actionClose_View"/>
+    <addaction name="actionNext_View"/>
+   </widget>
    <addaction name="menuEdit"/>
+   <addaction name="menuProject"/>
+   <addaction name="menuTools"/>
   </widget>
   <widget class="QToolBar" name="mainToolBar">
    <attribute name="toolBarArea">
@@ -74,6 +90,26 @@
   <action name="actionClear_Objects">
    <property name="text">
     <string>Clear Objects</string>
+   </property>
+  </action>
+  <action name="actionMonkeyTest">
+   <property name="text">
+    <string>MonkeyTest</string>
+   </property>
+  </action>
+  <action name="actionNew_View">
+   <property name="text">
+    <string>New View</string>
+   </property>
+  </action>
+  <action name="actionClose_View">
+   <property name="text">
+    <string>Close View</string>
+   </property>
+  </action>
+  <action name="actionNext_View">
+   <property name="text">
+    <string>Next View</string>
    </property>
   </action>
  </widget>

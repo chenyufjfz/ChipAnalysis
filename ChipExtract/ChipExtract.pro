@@ -4,23 +4,23 @@
 #
 #-------------------------------------------------
 
-QT       += core gui
+QT       += core gui concurrent
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG(debug, debug|release) {
 TARGET = ChipExtractd
-LIBS += -L$$_PRO_FILE_PWD_/../lib/debug
+LIBS += -L$$_PRO_FILE_PWD_/../lib/debug -lICLayerd
 } else {
 TARGET = ChipExtract
-LIBS += -L$$_PRO_FILE_PWD_/../lib/release
+LIBS += -L$$_PRO_FILE_PWD_/../lib/release -lICLayer
 }
 
 TEMPLATE = app
 LIBS += -L$$_PRO_FILE_PWD_/../lib
 LIBS += -lRaknet -lMdb
-INCLUDEPATH += ../Raknet/Include ../Mdb ../DatServer/
-DEPENDPATH += ../Raknet/Source ../Raknet/Include ../Mdb
+INCLUDEPATH += $$_PRO_FILE_PWD_/../Raknet/Include $$_PRO_FILE_PWD_/../Mdb $$_PRO_FILE_PWD_/../DatServer
+DEPENDPATH += $$_PRO_FILE_PWD_/../Raknet/Source $$_PRO_FILE_PWD_/../Raknet/Include $$_PRO_FILE_PWD_/../Mdb
 win32:LIBS += -lWs2_32 -ladvapi32
 
 
@@ -29,7 +29,6 @@ SOURCES += main.cpp\
     clientthread.cpp \
     renderimage.cpp \
     connectview.cpp \
-    globalconst.cpp \
     paramdialog.cpp \
     searchobject.cpp \
     objectdb.cpp
@@ -38,7 +37,6 @@ HEADERS  += extractwindow.h \
     clientthread.h \
     renderimage.h \
     connectview.h \
-    globalconst.h \
     paramdialog.h \
     searchobject.h \
     objectdb.h

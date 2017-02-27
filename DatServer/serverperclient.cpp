@@ -1,6 +1,7 @@
 #include "communication.hpp"
 #include "serverperclient.h"
 extern RakNet::RakPeerInterface *rak_peer;
+BkImgRoMgr bkimg_faty;
 
 void unpack_layer(unsigned char * layer, int layers)
 {
@@ -10,18 +11,41 @@ void unpack_layer(unsigned char * layer, int layers)
     layer[3] = layers >> 24;
 }
 
-CellExtractService::CellExtractService(QObject *parent) : QObject(parent)
+static string get_host_name(string prj_file)
 {
-    for (int i=0; i<sizeof(ce)/sizeof(ce[0]); i++)
-        ce[i] = NULL;
+	string host_name;
+	if ((prj_file[0] == '/' && prj_file[1] == '/') ||
+		(prj_file[0] == '\\' && prj_file[1] == '\\'))
+		host_name = prj_file.substr(2, prj_file.find_first_of("\\/") - 2);
+	else
+		host_name = "127.0.0.1";
+	return host_name;
 }
 
-void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, void *p)
+CellExtractService::CellExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
-    BkImgDB * bk_img = (BkImgDB *) bk_img_;
-	RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
-    RakNet::Packet *packet = (RakNet::Packet *) p;
+	token = _token;
+    for (int i=0; i<sizeof(ce)/sizeof(ce[0]); i++)
+        ce[i] = NULL;
+	qInfo("CellExtractfor token:%d is created", token);
+}
+
+CellExtractService::~CellExtractService()
+{
+	for (int i = 0; i < sizeof(ce) / sizeof(ce[0]); i++) {
+		if (ce[i])
+			delete ce[i];
+		ce[i] = NULL;
+	}
+	qInfo("CellExtractfor token:%d is destroyed", token);
+}
+void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet)
+{	
     ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
+	if (req_pkt->token != token)
+		return;
+	RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
+
     switch (req_pkt->command) {
         case CELL_TRAIN:
         if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam))
@@ -33,7 +57,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
             unpack_layer(&layer[4], pa->parami[1]);
 
             for (int i = 0; i < 8; i++)
-				if (layer[i] < bk_img->get_layer_num()) {
+				if (layer[i] < bk_img->getLayerNum()) {
 					if (ce[layer[i]] == NULL)
 						ce[layer[i]] = new CellExtract;
                     ce[layer[i]]->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
@@ -48,14 +72,18 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 					objs.push_back(obj);
                     qInfo("start cell train l=%d, dir=%x, (%d,%d)_(%d,%d)", (int) layer[i], obj.type3,
                           obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y());
-                    vector<ICLayerWr *> pic;
+                    vector<ICLayerWr *> pic;					
                     pic.push_back(bk_img->get_layer(layer[i]));
-                    ce[layer[i]]->train(pic, objs);
+					if (pic.back() != NULL)
+						ce[layer[i]]->train(pic, objs);
+					else
+						qCritical("ce train receive layer[%d]=%d, invalid", i, layer[i]);
 					break;
 				}
             RspSearchPkt rsp_pkt;
             rsp_pkt.typeId = ID_RESPONSE_OBJ_SEARCH;
             rsp_pkt.command = CELL_TRAIN;
+			rsp_pkt.token = req_pkt->token;
             rsp_pkt.rsp_search_num = 0;
             rak_peer->Send((char*) &rsp_pkt, sizeof(RspSearchPkt), MEDIUM_PRIORITY,
                 RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
@@ -73,7 +101,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 			unpack_layer(&layer[4], pa->parami[1]);
 
 			for (int i = 0; i < 8; i++)
-				if (layer[i] < bk_img->get_layer_num()) {
+				if (layer[i] < bk_img->getLayerNum()) {
 					if (ce[layer[i]] == NULL) {
 						qCritical("receive cell extract req before train!");
 						break;
@@ -87,12 +115,16 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 					vector<MarkObj> objs;
                     vector<ICLayerWr *> pic;
                     pic.push_back(bk_img->get_layer(layer[i]));
-                    ce[layer[i]]->extract(pic, areas, objs);
+					if (pic.back() != NULL)
+						ce[layer[i]]->extract(pic, areas, objs);
+					else
+						qCritical("cell_extract_req Receive layer[%d]=%d, invalid", i, layer[i]);                    
 					//send response
 					unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
 					RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
 					rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
 					rsp_pkt->command = CELL_EXTRACT;
+					rsp_pkt->token = req_pkt->token;
 					rsp_pkt->rsp_search_num = objs.size();
 					Location * ploc = &(rsp_pkt->result[0]);
 					for (unsigned j = 0; j < objs.size(); j++) {
@@ -111,21 +143,29 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, void * bk_img_, voi
 		}
         break;
     }
-    rak_peer->DeallocatePacket(packet);
+    
 }
 
-VWExtractService::VWExtractService(QObject *parent) : QObject(parent)
+VWExtractService::VWExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
+	token = _token;
+	qInfo("VWExtract for token:%d is created", token);
     vwe = VWExtract::create_extract(0);
 }
 
-void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * p)
+VWExtractService::~VWExtractService()
 {
-    BkImgDB * bk_img = (BkImgDB *) bk_img_;
-    RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
-    RakNet::Packet *packet = (RakNet::Packet *) p;
-    ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
+	qInfo("VWExtract for token:%d is destroyed", token);
+	delete vwe;
+}
 
+void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet)
+{    
+    ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
+	if (req_pkt->token != token)
+		return;
+	RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
+	
     switch (req_pkt->command) {
     case VW_EXTRACT:
         if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
@@ -134,10 +174,16 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
             ReqSearchParam * pa = &(req_pkt->params[0]);
             vector<ICLayerWr *> pic;
             vector<SearchArea> search;
+			bool invalid_req = false;
             for (int l=0; l<req_pkt->req_search_num; l++) {
                 vwe->set_extract_param(l, pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
                           pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
                 pic.push_back(bk_img->get_layer(pa[l].parami[0]));
+				if (pic.back() == NULL)	{
+					qCritical("vw_extract_req receive layer[%d]=%d, invalid", l, pa[l].parami[0]);
+					invalid_req = true;
+					break;
+				}
                 qInfo("extract l=%d, wd=%d, vr=%d, rule=%x, wrule=%x, gd=%d, p1=%f, p2=%f, p3=%f",
                       pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
                       pa[l].parami[5], pa[l].paramf[0], pa[l].paramf[1], pa[l].paramf[2], pa[l].paramf[3]);
@@ -150,12 +196,14 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
             }
 
             vector<MarkObj> objs;
-            vwe->extract(pic, search, objs);
+			if (!invalid_req)
+				vwe->extract(pic, search, objs);
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
             RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
             rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
             rsp_pkt->command = VW_EXTRACT;
+			rsp_pkt->token = req_pkt->token;
             rsp_pkt->rsp_search_num = objs.size();
             Location * ploc = &(rsp_pkt->result[0]);
             for (unsigned j = 0; j < objs.size(); j++) {
@@ -173,107 +221,88 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, void * bk_img_, void * 
         }
         break;
     }
-    rak_peer->DeallocatePacket(packet);
+    
 }
 
-ServerPerClient::ServerPerClient(QObject *parent) : QObject(parent)
+bool ServerPerClient::inited = false;
+ServerPerClient::ServerPerClient(RakNet::SystemAddress cli_addr_, QObject *parent) : QObject(parent)
 {
-    bk_img = NULL;
-    ano_thread = new QThread;
-    ce_service = new CellExtractService;
-    vw_service = new VWExtractService;
-    connect(this, SIGNAL(cell_extract_req(void *, void *, void *)), 
-		ce_service, SLOT(cell_extract_req(void *, void *, void *)));
-    connect(this, SIGNAL(vw_extract_req(void*,void*,void*)),
-            vw_service, SLOT(vw_extract_req(void *, void *, void *)));
-    ce_service->moveToThread(ano_thread);
-    vw_service->moveToThread(ano_thread);
-    ano_thread->start();
+	if (!inited) {
+		inited = true;
+		qRegisterMetaType<QSharedPointer<RakNet::Packet> >();
+		qRegisterMetaType<QSharedPointer<BkImgInterface> >();
+	}
+	cli_addr = cli_addr_;
+	qInfo("Server for %s is created.", cli_addr.ToString());
+	work_thread = new QThread;
+	work_thread->start();
+	if (!connect(work_thread, SIGNAL(finished()), work_thread, SLOT(deleteLater())))
+		qFatal("Connect thread finished failed");
 }
 
 ServerPerClient::~ServerPerClient()
 {
-    ce_service->deleteLater();
-    ano_thread->quit();
-    delete ano_thread;
+	map<unsigned, ServicePerToken>::iterator iter;
+	for (iter = service_pool.begin(); iter != service_pool.end(); iter++) {
+		iter->second.ce_service->deleteLater();
+		iter->second.vw_service->deleteLater();
+	}
+	qInfo("Server for %s is destroyed.", cli_addr.ToString());
+    work_thread->quit();
 }
 
-void ServerPerClient::prepare(BkImgDB * bk_img_, RakNet::SystemAddress cli_addr_)
+void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
 {
-    if (bk_img!=NULL)
-        qCritical("Server Bkimg can only be set once");
-    bk_img = bk_img_;
-    cli_addr = cli_addr_;
-}
-
-void ServerPerClient::req_bk_img(unsigned char layer, unsigned char scale,
-        unsigned short x, unsigned short y, unsigned char priority)
-{
-    vector<uchar> data;
-    bk_img->get_layer(layer)->getRawImgByIdx(data, x, y, scale, sizeof(RspBkImgPkt));
-#if ENABLE_CHECK_SUM_BKIMG & ENABLE_CHECK_SUM
-    CHECKSUM_TYPE cksum=0;
-    if (!data.empty()) {
-        CHECKSUM_TYPE *p = (CHECKSUM_TYPE *) &data[reserved];
-        for (unsigned i=reserved; i+sizeof(CHECKSUM_TYPE)<data.size(); p++, i+=sizeof(CHECKSUM_TYPE))
-            cksum = cksum ^ *p;
-    }
-#endif
-    if (!data.empty()) {
-        RspBkImgPkt * rsp_pkt = (RspBkImgPkt *) &data[0];
-        rsp_pkt->typeId = ID_RESPONSE_BG_IMG;
-        rsp_pkt->scale = scale;
-        rsp_pkt->x = x;
-        rsp_pkt->y = y;
-        rsp_pkt->layer = layer;
-        rsp_pkt->len = (unsigned)data.size() - sizeof(RspBkImgPkt);
-#if ENABLE_CHECK_SUM_BKIMG & ENABLE_CHECK_SUM
-        rsp_pkt->check_sum = cksum;
-#endif
-        qInfo("Send bg_img l=%d, (%d,%d,%d), pkt_size=%d.", layer, scale, y, x, data.size());
-        rak_peer->Send((char*) &data[0], (int)data.size(), static_cast<PacketPriority> (priority),
-            RELIABLE_ORDERED, BKIMAGE_STREAM, cli_addr, false);
-    }
-}
-
-void ServerPerClient::handle_client_req(void * p)
-{
-    RakNet::Packet *packet = (RakNet::Packet *) p;
-    bool need_delete = true;
-
-    if (bk_img==NULL) {
-        qCritical("back image is not registered");
-        rak_peer->DeallocatePacket(packet);
-        return;
-    }
-
-    switch (packet->data[0]) {
-    case ID_REQUIRE_BG_IMG:
-        ReqBkImgPkt * req_pkt;
-        req_pkt = (ReqBkImgPkt *) packet->data;
-        if  (packet->length != sizeof(ReqBkImgPkt))
-            qFatal("Client %s send wrong ID_REQUIRE_BG_IMG.",  packet->systemAddress.ToString());
-        else
-            req_bk_img(req_pkt->layer, req_pkt->scale, req_pkt->x, req_pkt->y, req_pkt->priority);
-        break;
-
+	ReqSearchPkt * req_pkt = (ReqSearchPkt *)packet->data;
+	unsigned token = req_pkt->token;
+	map<unsigned, ServicePerToken>::iterator iter = service_pool.find(token);
+	if (cli_addr != packet->systemAddress) 
+		qCritical("Received wrong addr %s, excepted %s", packet->systemAddress.ToString(), cli_addr.ToString());
+	
+	if (iter == service_pool.end()) {
+		ServicePerToken service;
+		service.ce_service = new CellExtractService(token);
+		service.vw_service = new VWExtractService(token);
+		if (!connect(this, SIGNAL(cell_extract_req(void *, QSharedPointer<BkImgInterface>, QSharedPointer<RakNet::Packet>)),
+			service.ce_service, SLOT(cell_extract_req(void *, QSharedPointer<BkImgInterface>, QSharedPointer<RakNet::Packet>))))
+			qFatal("Connect cell_extract_req fail");
+		if (!connect(this, SIGNAL(vw_extract_req(void*, QSharedPointer<BkImgInterface>, QSharedPointer<RakNet::Packet>)),
+			service.vw_service, SLOT(vw_extract_req(void *, QSharedPointer<BkImgInterface>, QSharedPointer<RakNet::Packet>))))
+			qFatal("Connect vw_extract_req fail");
+		service.ce_service->moveToThread(work_thread);
+		service.vw_service->moveToThread(work_thread);
+		service_pool[token] = service;
+		iter = service_pool.find(token);		
+	}
+	Q_ASSERT(iter != service_pool.end());	
+	
+	switch (req_pkt->typeId) {
     case ID_REQUIRE_OBJ_SEARCH:
-        need_delete = false;
-        switch (packet->data[1]) {
+		if (req_pkt->command != SHUT_DOWN) {
+			string prj(&req_pkt->prj_file[1], req_pkt->prj_file[0]);
+			if (iter->second.bk_img.isNull() || iter->second.bk_img->get_prj_name() != prj)
+				iter->second.bk_img = bkimg_faty.open(prj, 0);
+		}
+        switch (req_pkt->command) {
         case CELL_TRAIN:            
         case CELL_EXTRACT:
             qInfo("Receive request cell %s", packet->data[1]==CELL_TRAIN ? "train" : "extract");
-            emit cell_extract_req((void*) &cli_addr, (void*) bk_img, (void*) packet);
+			emit cell_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
             break;
         case VW_EXTRACT:
-            emit vw_extract_req((void*) &cli_addr, (void*) bk_img, (void*) packet);
+			emit vw_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
             break;
+		case SHUT_DOWN:
+			iter->second.ce_service->deleteLater();
+			iter->second.vw_service->deleteLater();
+			service_pool.erase(iter);
+			break;
+		default:
+			qCritical("Unknown command %d arrive", req_pkt->command);
         }
         break;
 
     default:
         qCritical("Unknown packet %d arrive", packet->data[0]);
     }
-    if (need_delete)
-        rak_peer->DeallocatePacket(packet);
 }
