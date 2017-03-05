@@ -236,6 +236,8 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	//check if prj is new, if yes, open prj
 	if (bk_img.isNull()) {
 		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
+		if (bk_img.isNull())
+			return;
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
 		bk_img->getBlockNum(bx, by);
@@ -245,6 +247,8 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		prj_cnst.reset();
 		bk_img->adjust_cache_size(-CACHE_SIZE);
 		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
+		if (bk_img.isNull())
+			return;
 		preimg_map.clear();
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
@@ -272,13 +276,13 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	if don't like, delete following code
 	*/
 	while (rpixel.right() / w - rpixel.left() / w <= 1 && rpixel.width() >= rpixel.height()) {
-		if (rect.right() + w < prj_cnst.tot_width_pixel())
+		if (rpixel.right() + w < prj_cnst.tot_width_pixel())
 			rpixel.adjust(0, 0, w, 0);
 		else
 			rpixel.adjust(-w, 0, 0, 0);
 	}
 	while (rpixel.bottom() / h - rpixel.top() / h <= 1 && rpixel.width() < rpixel.height()) {
-		if (rect.bottom() + h < prj_cnst.tot_height_pixel())
+		if (rpixel.bottom() + h < prj_cnst.tot_height_pixel())
 			rpixel.adjust(0, 0, 0, h);
 		else
 			rpixel.adjust(0, -h, 0, 0);
@@ -295,10 +299,11 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	map <MapID, unsigned int> curimg_map;
 	qDebug("Renderimg, s=%d, w=(%d,%d), Rp=(%d,%d,%d,%d) ", scale, w, h, rpixel.left() / w, rpixel.top() / h, rpixel.right() / w, rpixel.bottom() / h);
 	for (int x = rpixel.left() / w, x0 = 0; x <= rpixel.right() / w; x++, x0 += prj_cnst.img_block_w())
-		for (int y = rpixel.top() / h, y0 = 0; y <= rpixel.bottom() / h; y++, y0 += prj_cnst.img_block_h()) {
+		for (int y = rpixel.top() / h, y0 = 0; y <= rpixel.bottom() / h; y++, y0 += prj_cnst.img_block_h()) 
+			if (x >= 0 && x < prj_cnst.num_block_x() && y >= 0 && y < prj_cnst.num_block_y()) {
 			MapID id = sxy2mapid(layer, scale, x << scale, y << scale);
 			list<PrevImg>::iterator iter;
-			bool found = false;
+
 			map<MapID, unsigned int>::iterator preimg_it = preimg_map.find(id);
 			if (preimg_it != preimg_map.end() && rt != NO_NEED_RETURN) {
 				unsigned x1 = preimg_it->second & 0xffff;
@@ -315,7 +320,7 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 					pb->x0 = x0;
 					pb->y0 = y0;
 					pb->id = id;
-					qDebug("decode image (%d,%d)", y0, x0);
+					qDebug("decode image (%d,%d) to (%d,%d)", y, x, y0, x0);
 					subimgs.push_back(QtConcurrent::run(thread_decode_image, QSharedPointer<EncodeImg>(pb)));
 					curimg_map[id] = (y0 << 16) | x0;
 				}

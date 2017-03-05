@@ -24,7 +24,7 @@ static string get_host_name(string prj_file)
 	string host_name;
 	if ((prj_file[0] == '/' && prj_file[1] == '/') ||
 		(prj_file[0] == '\\' && prj_file[1] == '\\'))
-		host_name = prj_file.substr(2, prj_file.find_first_of("\\/") - 2);
+        host_name = prj_file.substr(2, prj_file.find_first_of("\\/", 3) - 2);
 	else
 		host_name = "127.0.0.1";
 	return host_name;

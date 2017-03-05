@@ -15,16 +15,8 @@ MainWindow::MainWindow(QWidget *parent) :
     status_label = new QLabel;
     status_label->setMinimumSize(200, 20);
     ui->statusBar->addWidget(status_label);
-#ifdef WIN32
-    ConnectView * connect_view = new ConnectView("F:/chenyu/work/ChipStitch/data/hanzhou/M1/chip.prj", this);
-#else
-    ConnectView * connect_view = new ConnectView("../../share/imgdb/chip.prj", this);
-#endif
-    connect(connect_view, SIGNAL(mouse_change(QPoint, QString)), this, SLOT(mouse_change(QPoint, QString)));
-	views.addWidget(connect_view);
 	monkey_test_id = 0;
     setCentralWidget(&views);
-    connect_view->setFocus(); 
 }
 
 MainWindow::~MainWindow()
@@ -175,12 +167,14 @@ void MainWindow::on_actionNew_View_triggered()
 {
 #ifdef WIN32
     ConnectView * connect_view = new ConnectView("F:/chenyu/work/ChipStitch/data/hanzhou/M1/chip.prj", this);
+    //ConnectView * connect_view = new ConnectView("//10.233.140.185/Linuxshare/imgdb/chip.prj", this);
 #else
     ConnectView * connect_view = new ConnectView("../../share/imgdb/chip.prj", this);
 #endif
     connect(connect_view, SIGNAL(mouse_change(QPoint, QString)), this, SLOT(mouse_change(QPoint, QString)));
     views.addWidget(connect_view);
 	views.setCurrentWidget(connect_view);
+	connect_view->setFocus();
 }
 
 void MainWindow::on_actionClose_View_triggered()

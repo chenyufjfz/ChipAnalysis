@@ -280,8 +280,11 @@ void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
     case ID_REQUIRE_OBJ_SEARCH:
 		if (req_pkt->command != SHUT_DOWN) {
 			string prj(&req_pkt->prj_file[1], req_pkt->prj_file[0]);
-			if (iter->second.bk_img.isNull() || iter->second.bk_img->get_prj_name() != prj)
+            if (iter->second.bk_img.isNull() || iter->second.bk_img->get_prj_name() != prj) {
 				iter->second.bk_img = bkimg_faty.open(prj, 0);
+                if (iter->second.bk_img.isNull())
+                    return;
+            }
 		}
         switch (req_pkt->command) {
         case CELL_TRAIN:            

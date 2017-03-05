@@ -177,6 +177,7 @@ void ConnectView::paintEvent(QPaintEvent *)
 		Q_ASSERT(view_rect.left() >= pcst->left_bound() && view_rect.right() <= pcst->right_bound() &&
 			view_rect.top() >= pcst->top_bound() && view_rect.bottom() <= pcst->bottom_bound());
 	}
+
     if (!render_rect.contains(view_rect) || render_bk_layer !=bk_layer) {
         qDebug("request image l=%d,vr=(%d,%d,%d,%d), screen=(%d,%d)", bk_layer, view_rect.left(), view_rect.top(),
                view_rect.width(), view_rect.height(), size().width(), size().height());
