@@ -7,6 +7,7 @@
 ClientThread ct;
 
 static FILE * fp = NULL;
+#define QMSG_FLUSH   1
 
 void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {    
@@ -24,12 +25,21 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
         switch (type) {
         case QtDebugMsg:
             fprintf(fp, "<D>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
+#if QMSG_FLUSH
+            fflush(fp);
+#endif
             break;
         case QtInfoMsg:
             fprintf(fp, "<I>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
+#if QMSG_FLUSH
+            fflush(fp);
+#endif
             break;
         case QtWarningMsg:
             fprintf(fp, "<W>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
+#if QMSG_FLUSH
+            fflush(fp);
+#endif
             break;
         case QtCriticalMsg:
             fprintf(fp, "<E>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));

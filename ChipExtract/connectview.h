@@ -13,6 +13,13 @@ enum {
     CHOOSE_ANO_POINT,
     SELECT_EXIST
 };
+
+typedef enum {
+	DISPLAY1,
+	DISPLAY12_OP2,
+	DISPLAY12_OP1,
+} DisplayState;
+
 struct MarkState {
     int state;
     unsigned char type;
@@ -28,7 +35,7 @@ public:
 
 signals:
 	void render_bkimg(string prj, const unsigned char layer, const QRect rect,
-                      const QSize screen, RenderType rt, const QObject * view, bool preload_enable);
+                      const QSize screen, RenderType rt, const void * view, bool preload_enable);
     void train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
 	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
@@ -40,7 +47,7 @@ public slots:
 	void server_connected();
 	void server_disconnected();
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
-                           QImage image, bool finish, const QObject * view);
+                           QImage image, bool finish, const void * view);
     void extract_cell_done(QSharedPointer<SearchResults> prst);
     void extract_wire_via_done(QSharedPointer<SearchResults> prst);
 
@@ -63,13 +70,14 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event);
 
 protected:
+	DisplayState ds;
     bool hide_element;
     MarkState ms;
-	QImage render_img;
-    QRect render_rect, view_rect;
-    QPoint center;
-    double scale;
-    unsigned char bk_layer, render_bk_layer;
+	QImage render_img, render_img_2;
+    QRect render_rect, view_rect, view_rect_2, screen_2;
+    QPoint center, center_2;
+    double scale, scale_2;
+    unsigned char bk_layer, bk_layer_2, render_bk_layer;
 	PrjConst *pcst;
 	string prj_file;
 };

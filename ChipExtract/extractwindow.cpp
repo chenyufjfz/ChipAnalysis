@@ -143,7 +143,9 @@ void MainWindow::timerEvent(QTimerEvent *e)
 						key = new QKeyEvent(QEvent::KeyPress, Qt::Key_PageUp, Qt::NoModifier);
 					else
 						key = new QKeyEvent(QEvent::KeyPress, Qt::Key_PageDown, Qt::NoModifier);
-				}
+                } else
+                    if (r < 736)
+                        key = new QKeyEvent(QEvent::KeyPress, Qt::Key_D, Qt::NoModifier);
 		}
 
 		if (key!=NULL)
@@ -165,12 +167,12 @@ void MainWindow::on_actionMonkeyTest_triggered()
 
 void MainWindow::on_actionNew_View_triggered()
 {
-#ifdef WIN32
-    ConnectView * connect_view = new ConnectView("F:/chenyu/work/ChipStitch/data/hanzhou/M1/chip.prj", this);
-    //ConnectView * connect_view = new ConnectView("//10.233.140.185/Linuxshare/imgdb/chip.prj", this);
-#else
-    ConnectView * connect_view = new ConnectView("../../share/imgdb/chip.prj", this);
-#endif
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"),
+                                                    "./",
+                                                    tr("Project (*.prj)"));
+
+    ConnectView * connect_view = new ConnectView(fileName.toStdString().c_str(), this);
+
     connect(connect_view, SIGNAL(mouse_change(QPoint, QString)), this, SLOT(mouse_change(QPoint, QString)));
     views.addWidget(connect_view);
 	views.setCurrentWidget(connect_view);

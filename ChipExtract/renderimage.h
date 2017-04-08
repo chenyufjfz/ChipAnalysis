@@ -14,6 +14,7 @@ typedef unsigned long long MapID;
 typedef enum {
     RETURN_UNTIL_ALL_READY,  //Return image when all clear subimages are ready, request may be sent to server and wait all clear subimage ready, caller get only one return, and may wait several seconds.
     RETURN_WHEN_PART_READY,  //Return image immediately, if clear subimage is not ready use blur image instead, and then request may be sent to server and wait all subimage ready, and then return more clear image to caller. So caller may get two or more return. One return is immediate blur image, Another return is clear image after several seconds.
+	RETURN_EXACT_MATCH,
     NO_NEED_RETURN			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
 } RenderType;
 
@@ -68,11 +69,11 @@ public:
 
 signals:
     void render_bkimg_done(const unsigned char layer, const QRect rect, const QSize screen,
-                           QImage image, bool finish, const QObject * view);
+                           QImage image, bool finish, const void * view);
 
 public slots:
     void render_bkimg(string prj, const unsigned char layer, const QRect rect,
-                      const QSize screen, RenderType rt, const QObject * view, bool preload_enable);
+                      const QSize screen, RenderType rt, const void * view, bool preload_enable);
 
 protected:
 	static bool inited;

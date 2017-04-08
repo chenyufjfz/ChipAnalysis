@@ -190,12 +190,12 @@ PrjConst * RenderImage::register_new_window(QObject * pobj)
 	RenderImage * render_image = new RenderImage;
 	
 	//Connect bkimg request
-	if (!connect(pobj, SIGNAL(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const QObject *, bool)),
-		render_image, SLOT(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const QObject *, bool)))) 
+	if (!connect(pobj, SIGNAL(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)),
+		render_image, SLOT(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)))) 
 		qFatal("Connect render_bkimg failed");
 			
-	if (!connect(render_image, SIGNAL(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const QObject *)),
-		pobj, SLOT(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const QObject *)))) 
+	if (!connect(render_image, SIGNAL(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)),
+		pobj, SLOT(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)))) 
 		qFatal("Connect render_bkimg_done failed");
 	
 	//Widget destroyed cause render_image delete
@@ -231,7 +231,7 @@ RenderImage::~RenderImage()
  * screen's unit is pixel
  */
 void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRect rect,
-	const QSize screen, RenderType rt, const QObject * view, bool preload_enable)
+	const QSize screen, RenderType rt, const void * view, bool preload_enable)
 {
 	//check if prj is new, if yes, open prj
 	if (bk_img.isNull()) {
@@ -336,11 +336,21 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 			painter.drawImage(QRect(subimg.x0, subimg.y0, prj_cnst.img_block_w(), prj_cnst.img_block_h()), subimg.img);			
 		}
 		subimgs.clear();
-		preimg_map = curimg_map;
-		prev_img = image;
 		QRect render_rect_pixel(QPoint(rpixel.left() / w * w, rpixel.top() / h * h),
 			QPoint(rpixel.right() / w * w + w - 1, rpixel.bottom() / h * h + h - 1));
-		emit render_bkimg_done(layer, prj_cnst.pixel2bu(render_rect_pixel), screen,
-			image, true, view);
+		QRect render_rect = prj_cnst.pixel2bu(render_rect_pixel);
+		if (rt != RETURN_EXACT_MATCH) {
+			preimg_map = curimg_map;
+			prev_img = image;			
+			emit render_bkimg_done(layer, render_rect, screen, image, true, view);
+		}
+		else {
+			QRect source((double)image.width() * (rect.left() - render_rect.left()) / render_rect.width(),
+				(double)image.height()* (rect.top() - render_rect.top()) / render_rect.height(),
+				(double)image.width() * rect.width() / render_rect.width(),
+				(double)image.height()* rect.height() / render_rect.height());
+			QImage match_img = image.copy(source).scaled(screen);
+			emit render_bkimg_done(layer, rect, screen, match_img, true, view);
+		}
 	}
 }
