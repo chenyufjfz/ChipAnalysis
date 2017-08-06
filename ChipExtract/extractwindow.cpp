@@ -30,7 +30,7 @@ void MainWindow::on_actionTrain_triggered()
 		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 		Q_ASSERT(connect_view != NULL);
         if (param_dlg.choose_cell)
-            connect_view->train(true, 0, 0, 0, 0, param_dlg.cell_param1,
+            connect_view->cell_train(0, 0, 0, 0, param_dlg.cell_param1,
                 param_dlg.cell_param2, param_dlg.cell_param3);
     }
 }
@@ -41,11 +41,13 @@ void MainWindow::on_actionExtract_triggered()
 		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 		Q_ASSERT(connect_view != NULL);
         if (param_dlg.choose_cell)
-            connect_view->extract(true, 0, 0, 0, 0, param_dlg.cell_param1,
+            connect_view->cell_extract(0, 0, 0, 0, param_dlg.cell_param1,
                 param_dlg.cell_param2, param_dlg.cell_param3);
-        else
-            connect_view->extract(false, 0, 0, 0, 0, param_dlg.cell_param1,
-                param_dlg.cell_param2, param_dlg.cell_param3);
+		else {
+			VWSearchRequest vwsr;
+			param_dlg.ep.get_param(param_dlg.action_name, vwsr.lpa);
+			connect_view->wire_extract(vwsr);
+		}
     }
 
 }

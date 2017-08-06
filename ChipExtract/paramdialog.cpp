@@ -1,34 +1,24 @@
 #include "paramdialog.h"
 #include "ui_paramdialog.h"
+#include <QFileDialog>
 
 ParamDialog::ParamDialog(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::ParamDialog)
 {
     ui->setupUi(this);
-    wire_width = 10;
-    grid_width = 15;
-    insu_width = 5;
-    via_radius = 9;
-    vw_param1 = 0.1;
-    vw_param2 = 0;
-    vw_param3 = 0.2;
+	file_name = "./action.xml";
+	update_action();
 
     cell_param1 = 0.1;
     cell_param2 = 3;
     cell_param3 = 0;
     choose_cell = false;
 
-    ui->wire_width->setText(QString::number(wire_width));
-    ui->grid_width->setText(QString::number(grid_width));
-    ui->insu_width->setText(QString::number(insu_width));
-    ui->via_radius->setText(QString::number(via_radius));
-    ui->vw_param1->setText(QString::number(vw_param1));
-    ui->vw_param2->setText(QString::number(vw_param2));
-    ui->vw_param3->setText(QString::number(vw_param3));
-    ui->cell_param1->setText(QString::number(cell_param1));
+	ui->file_name->setText(QString::fromStdString(file_name));
+	ui->cell_param1->setText(QString::number(cell_param1));
     ui->cell_param2->setText(QString::number(cell_param2));
-    ui->cell_param3->setText(QString::number(cell_param3));
+    ui->cell_param3->setText(QString::number(cell_param3));	
 }
 
 ParamDialog::~ParamDialog()
@@ -40,14 +30,7 @@ ParamDialog::~ParamDialog()
 void ParamDialog::on_pushButton_clicked()
 {
     choose_cell = false;
-
-    wire_width = ui->wire_width->text().toInt();
-    grid_width = ui->grid_width->text().toInt();
-    insu_width = ui->insu_width->text().toInt();
-    via_radius = ui->via_radius->text().toInt();
-    vw_param1 = ui->vw_param1->text().toDouble();
-    vw_param2 = ui->vw_param2->text().toDouble();
-    vw_param3 = ui->vw_param3->text().toDouble();
+	action_name = ui->actions->currentItem()->text().toStdString();
     cell_param1 = ui->cell_param1->text().toDouble();
     cell_param2 = ui->cell_param2->text().toDouble();
     cell_param3 = ui->cell_param3->text().toDouble();
@@ -58,15 +41,54 @@ void ParamDialog::on_pushButton_2_clicked()
 {
     choose_cell = true;
 
-    wire_width = ui->wire_width->text().toInt();
-    grid_width = ui->grid_width->text().toInt();
-    insu_width = ui->insu_width->text().toInt();
-    via_radius = ui->via_radius->text().toInt();
-    vw_param1 = ui->vw_param1->text().toDouble();
-    vw_param2 = ui->vw_param2->text().toDouble();
-    vw_param3 = ui->vw_param3->text().toDouble();
     cell_param1 = ui->cell_param1->text().toDouble();
     cell_param2 = ui->cell_param2->text().toDouble();
     cell_param3 = ui->cell_param3->text().toDouble();
     accept();
+}
+
+void ParamDialog::on_actions_itemClicked(QListWidgetItem *item)
+{
+    QListWidget * param = ui->params;
+    int count = param->count();
+    for (int i = 0; i < count; i++)
+        delete param->takeItem(0);
+	vector<string> param_items;
+	ep.get_param_sets(item->text().toStdString(), param_items);
+	for (int i = 0; i < param_items.size(); i++)
+		param->addItem(QString::fromStdString(param_items[i]));
+}
+
+void ParamDialog::on_lineEdit_editingFinished()
+{	
+	file_name = ui->file_name->text().toStdString();
+	update_action();
+}
+
+void ParamDialog::update_action()
+{
+	ep.clear();
+	ep.read_file(file_name);
+	QListWidget * action = ui->actions;
+	int count = action->count();
+	for (int i = 0; i < count; i++)
+		delete action->takeItem(0);
+	vector<string> actions;
+	ep.get_param_set_list(actions);
+	for (int i = 0; i < actions.size(); i++)
+		ui->actions->addItem(QString::fromStdString(actions[i]));
+
+	QListWidget * param = ui->params;
+	count = param->count();
+	for (int i = 0; i < count; i++)
+		delete param->takeItem(0);
+}
+void ParamDialog::on_pushButton_3_clicked()
+{
+	QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"),
+		"./",
+		tr("Project (*.xml)"));
+    file_name = fileName.toStdString();
+    ui->file_name->setText(fileName);
+	update_action();
 }

@@ -34,8 +34,8 @@ typedef struct {
 } Location;
 
 typedef struct {
-    int parami[8];
-    float paramf[5];
+    int parami[11];
+    float paramf;
     Location loc[1];
 } ReqSearchParam;
 

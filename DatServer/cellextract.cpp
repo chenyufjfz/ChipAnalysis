@@ -483,7 +483,7 @@ int CellExtract::extract(string file_name, QRect rect, vector<MarkObj> & obj_set
 typedef unsigned long long MapID;
 
 
-int CellExtract::train(vector<ICLayerWr *> & ic_layer, const std::vector<MarkObj> & obj_sets)
+int CellExtract::train(vector<ICLayerWrInterface *> & ic_layer, const std::vector<MarkObj> & obj_sets)
 {
     vector<unsigned> bins, th;
     Mat mark, img;
@@ -499,7 +499,7 @@ int CellExtract::train(vector<ICLayerWr *> & ic_layer, const std::vector<MarkObj
             }
             QRect rect(obj_sets[i].p0, obj_sets[i].p1);
             int scale = 32768 / ic_layer[0]->getBlockWidth();
-			if (rect.height() / scale <= FEATURE0_SIZE * 3 && rect.width() / scale <= FEATURE0_SIZE * 3) {
+			if (rect.height() / scale <= FEATURE0_SIZE * 3 || rect.width() / scale <= FEATURE0_SIZE * 3) {
 				qCritical("cell size (%d, %d) is small!", rect.height() / scale, rect.width() / scale);
 				return -1;
 			}
@@ -568,7 +568,7 @@ struct SearchResult {
     }
 };
 
-int CellExtract::extract(vector<ICLayerWr *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets)
+int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets)
 {
 	if (cell.empty()) {
 		qCritical("Cell must be traininged before extract");

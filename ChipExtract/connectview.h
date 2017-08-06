@@ -52,8 +52,9 @@ public slots:
     void extract_wire_via_done(QSharedPointer<SearchResults> prst);
 
 public:
-    void train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
-    void extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3);
+    void cell_train(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
+    void cell_extract(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
+	void wire_extract(VWSearchRequest & vp);
     void load_objects(string file_name);
     void set_mark(unsigned char type, unsigned char type2);
     void clear_objs();

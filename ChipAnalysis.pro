@@ -7,6 +7,6 @@ SUBDIRS += \
     DatServer \
     ChipExtract
 
-Try.depends = Raknet Mdb
-DatServer.depends = Raknet Mdb
-ChipExtract.depends = Raknet Mdb
+#Try.depends = Raknet Mdb
+#DatServer.depends = Raknet Mdb
+#ChipExtract.depends = Raknet Mdb

@@ -559,7 +559,7 @@ void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
         ElementObj obj(prst->objs[i]);
         odb.add_object(obj);
     }
-    QMessageBox::about(this, "Extract done", "Extract done");
+    QMessageBox::about(this, "Extract cell done", "Extract cell done");
 }
 
 void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
@@ -568,59 +568,40 @@ void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
         ElementObj obj(prst->objs[i]);
         odb.add_object(obj);
     }
-    QMessageBox::about(this, "Extract done", "Extract done");
+    QMessageBox::about(this, "Extract wire done", "Extract wire done");
 }
 
-void ConnectView::train(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3)
+void ConnectView::cell_train(int i1, int i2, int i3, int i4, float f1, float f2, float f3)
 {
-    if (cell_train) {
-        qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
-        QPoint p0(1551572, 255590), p1(1565716, 259494);
-        //emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
-        vector<ElementObj*> tr;
-        odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, pcst->bound_rect_bu(), tr);
-        p0 = tr[0]->p0;
-        p1 = tr[0]->p1;
-        emit train_cell(prj_file, 1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
-    }    
+    qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
+    QPoint p0(1551572, 255590), p1(1565716, 259494);
+    //emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+    vector<ElementObj*> tr;
+    odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, pcst->bound_rect_bu(), tr);
+    p0 = tr[0]->p0;
+    p1 = tr[0]->p1;
+    emit train_cell(prj_file, 1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);     
 }
 
-void ConnectView::extract(bool cell_train, int i1, int i2, int i3, int i4, float f1, float f2, float f3)
+void ConnectView::cell_extract(int i1, int i2, int i3, int i4, float f1, float f2, float f3)
+{    
+    qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
+    SearchRects * sr = new SearchRects;
+    sr->dir.push_back(POWER_UP | POWER_DOWN);
+    vector<ElementObj*> er;
+    odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
+    QPoint p0 = er[0]->p0;
+    QPoint p1 = er[0]->p1;
+    sr->rects.push_back(QRect(p0, p1));
+    emit extract_cell(prj_file, 1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+}
+
+void ConnectView::wire_extract(VWSearchRequest & vp)
 {
-    if (cell_train) {
-        qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
-        SearchRects * sr = new SearchRects;
-        sr->dir.push_back(POWER_UP | POWER_DOWN);
-        //sr->rects.push_back(QRect(1300000, 200000, 500000, 500000));
-        //emit extract_cell(1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
-        vector<ElementObj*> er;
-        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
-        QPoint p0 = er[0]->p0;
-        QPoint p1 = er[0]->p1;
-        sr->rects.push_back(QRect(p0, p1));
-        emit extract_cell(prj_file, 1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
-    } else {
-        qInfo("Accept wire extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
-        VWSearchRequest * preq = new VWSearchRequest;
-        preq->lpa.push_back(LayerParam(1, 4, 9,
-            RULE_END_WITH_VIA, RULE_END_WITH_VIA,
-            16, 0.5, 0.5, 1, 0));
-        preq->lpa.push_back(LayerParam(2, 10, 9,
-            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
-            RULE_NO_hCONN, 16, 0.5, 0.5, 2, 0));
-        preq->lpa.push_back(LayerParam(3, 12, 10,
-            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
-            RULE_NO_hCONN, 16, 0.5, 0.5, 2, 0));
-        preq->lpa.push_back(LayerParam(4, 12, 10,
-            RULE_NO_LOOP | RULE_NO_HCONN | RULE_NO_TT_CONN | RULE_END_WITH_VIA | RULE_EXTEND_VIA_OVERLAP | RULE_NO_ADJ_VIA_CONN,
-            RULE_NO_hCONN, 16, 0.5, 0.5, 1, 0));
-        //QRect(1430000, 586000, 65536, 65536), QRect(1450000, 600000, 65536, 65536)
-        //QRect(1450000, 586000, 65536, 65536)
-        //emit extract_wire_via(QSharedPointer<VWSearchRequest>(preq), QRect(1430000, 600000, 65536, 65536));
-        vector<ElementObj*> er;
-        odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
-        QPoint p0 = er[0]->p0;
-        QPoint p1 = er[0]->p1;
-        emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
-    }
+	vector<ElementObj*> er;
+	odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, pcst->bound_rect_bu(), er);
+	QPoint p0 = er[0]->p0;
+	QPoint p1 = er[0]->p1;
+	VWSearchRequest * preq = new VWSearchRequest(vp);
+	emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
 }
