@@ -72,7 +72,7 @@ void MainWindow::on_actionLoad_Objects_triggered()
 	Q_ASSERT(connect_view != NULL);
     QString image_file_name = QFileDialog::getOpenFileName( this,
                             "open file",
-                            "C:/chenyu/work/ChipPintu/ViaWireExtract/");
+                            "C:/chenyu/work/ChipPintu/app/");
     connect_view->load_objects(image_file_name.toStdString());
 }
 

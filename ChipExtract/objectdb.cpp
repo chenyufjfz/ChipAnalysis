@@ -215,6 +215,7 @@ int ObjectDB::load_objets(string file_name)
         obj.type = t >> 16 & 0xff;
         add_object(obj);
     }
+    fclose(fp);
     return 0;
 }
 
