@@ -753,7 +753,7 @@ bool ExtractParam::read_file(string filename)
 				int extend2 = (int)(*it)["extend2"];
 
 				if (opidx_hl_mask >= 16 ||  clear_mask >= 256 || wnum >= 256) {
-					qCritical("ParamItems file error, name=%s, opidx_hl_mask=%d, opidx_shadow_prob=%d, clear_mask=%d, wnum=%d",
+                    qCritical("ParamItems file error, name=%s, opidx_hl_mask=%d, clear_mask=%d, wnum=%d",
 						name.c_str(), opidx_hl_mask, clear_mask, wnum);
 					check_pass = false;
 				}
