@@ -201,16 +201,32 @@ int ObjectDB::load_objets(string file_name)
     if (fp==NULL)
         return -1;
     ElementObj obj;
+    char line[800];
     while (!feof(fp)) {
         unsigned t;
-        int x0, y0, x1, y1;
-        fscanf(fp, "t=%d, (%d,%d)->(%d,%d)\n", &t, &x0, &y0, &x1, &y1);
+        int x0, y0, x1, y1, n;
+        bool pass = true;
+        fgets(line, sizeof(line), fp);
+        switch (line[0]) {
+        case 'w':
+            n = sscanf(line, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d)", &t, &x0, &y0, &x1, &y1);
+            pass = (n==5);
+            t = OBJ_LINE << 16 | LINE_WIRE_AUTO_EXTRACT << 8 | t;
+            break;
+        case 'v':
+            n = sscanf(line, "via, l=%d, x=%d, y=%d", &t, &x0, &y0);
+            x1 = x0, y1 = y0;
+            pass = (n==3);
+            t = OBJ_POINT << 16 | POINT_VIA_AUTO_EXTRACT << 8 | t;
+            break;
+        }
+
         obj.p0.setX(x0);
         obj.p0.setY(y0);
         obj.p1.setX(x1);
         obj.p1.setY(y1);
         obj.type3 = t & 0xff;
-        obj.type3 = obj.type3+1;//TODO repair me
+        obj.type3 = obj.type3;//TODO repair me
         obj.type2 = t >> 8 & 0xff;
         obj.type = t >> 16 & 0xff;
         add_object(obj);

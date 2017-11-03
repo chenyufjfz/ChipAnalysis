@@ -3,7 +3,7 @@
 #include <set>
 extern RakNet::RakPeerInterface *rak_peer;
 BkImgRoMgr bkimg_faty;
-
+#define DUMP_RESULT     1
 void unpack_layer(unsigned char * layer, int layers)
 {
     layer[0] = layers & 0xff;
@@ -71,7 +71,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 					obj.p0 = QPoint(pa->loc[0].x0, pa->loc[0].y0);
 					obj.p1 = QPoint(pa->loc[0].x1, pa->loc[0].y1);
 					objs.push_back(obj);
-                    qInfo("start cell extract l=%d, dir=%x, (%d,%d)_(%d,%d)", (int) layer[i], obj.type3,
+                    qInfo("start cell train l=%d, dir=%x, (%d,%d)_(%d,%d)", (int) layer[i], obj.type3,
                           obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y());
 					vector<ICLayerWrInterface *> pic;
                     pic.push_back(bk_img->get_layer(layer[i]));
@@ -115,6 +115,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 						pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
 					vector<MarkObj> objs;
 					vector<ICLayerWrInterface *> pic;
+                    qInfo("start cell extract, layer=%d", layer[i]);
                     pic.push_back(bk_img->get_layer(layer[i]));
 					if (pic.back() != NULL)
 						ce[layer[i]]->extract(pic, areas, objs);
@@ -175,19 +176,37 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             vector<SearchArea> search;
 			bool invalid_req = false;
 			set<int> layer_sets;
-			vector<int> map_layer;
-			map<int, int> anti_map_layer;
+            vector<int> map_layer; //map from 0, 1, 2 to actual layer
+            map<int, int> anti_map_layer; //map from ParamItem to layer 0, 1, 2
 			for (int i = 0; i < req_pkt->req_search_num; i++)
 				if (pa[i].parami[0]>=0)
 					layer_sets.insert(pa[i].parami[0]);
 			for (set<int>::iterator it = layer_sets.begin(); it != layer_sets.end(); it++) {
 				anti_map_layer[*it] = map_layer.size();
-				map_layer.push_back(*it);
-                pic.push_back(bk_img->get_layer(*it));
-                if (pic.back() == NULL)
-                    qFatal("vw_extract_req receive layer[%d]=%d, invalid", map_layer.size() - 1, *it);
-                else
-                    qInfo("vw_extract_req receive layer[%d]=%d", map_layer.size() - 1, *it);
+                int l = -1;
+                for (int i = 0; i < bk_img->getLayerNum(); i++) {
+                    string layer_name = bk_img->getLayerName(i);
+                    int t = layer_name.find_last_of('.');
+                    int h = layer_name.find_last_of('M', t);
+                    string sub = layer_name.substr(h + 1, t - h - 1);
+                    if (atoi(sub.c_str()) == *it) {
+                        l = i;
+                        break;
+                    }
+                }
+                if (l >= 0) {
+                    map_layer.push_back(l);
+                    pic.push_back(bk_img->get_layer(l));
+                    if (pic.back() == NULL) {
+                        qCritical("vw_extract_req receive layer[%d]=%d, invalid", map_layer.size() - 1, l);
+                        return;
+                    } else
+                        qInfo("vw_extract_req receive layer[%d]=%d", map_layer.size() - 1, l);
+                }
+                else {
+                    qCritical("vw_extract_req layer M%d not exist", *it);
+                    return;
+                }
 			}
 			VWExtract * vwe = VWExtract::create_extract(0);
             for (int l = 0; l<req_pkt->req_search_num; l++) {
@@ -199,7 +218,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 					vwe->set_extract_param(pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
 						pa[l].parami[5], pa[l].parami[6], pa[l].parami[7], pa[l].parami[8], pa[l].paramf);                
 				
-				qInfo("extract l=%d, i0=%x,i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,i7=%x,i8=%x,f=%f", pa[l].parami[0],
+                qInfo("extract l=%d, i0=%x,i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,i7=%x,i8=%x,f=%f", anti_map_layer[pa[l].parami[0]],
 					  pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
                       pa[l].parami[5], pa[l].parami[6], pa[l].parami[7], pa[l].parami[8], pa[l].paramf);
                 QRect rect(QPoint(pa[l].loc[0].x0, pa[l].loc[0].y0), QPoint(pa[l].loc[0].x1, pa[l].loc[0].y1));
@@ -213,6 +232,23 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             vector<MarkObj> objs;
 			if (!invalid_req)
 				vwe->extract(pic, search, objs);
+#if DUMP_RESULT
+            FILE * fp;
+            int scale = 32768 / bk_img->getBlockWidth();
+            fp = fopen("result.txt", "w");
+            for (int i = 0; i < objs.size(); i++) {
+                unsigned t = objs[i].type;
+                if (t == OBJ_POINT) {
+                    fprintf(fp, "via, l=%d, x=%d, y=%d\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale);
+                }
+                else {
+                    fprintf(fp, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d)\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale,
+                        objs[i].p1.x() / scale, objs[i].p1.y() / scale);
+                }
+                continue;
+            }
+            fclose(fp);
+#endif
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
             RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);

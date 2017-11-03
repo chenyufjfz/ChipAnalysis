@@ -347,6 +347,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
         pa[l].loc[0].x1 = 0;
         pa[l].loc[0].y1 = 0;
     }
+
     pa[0].loc[0].x0 = rect.left();
     pa[0].loc[0].y0 = rect.top();
     pa[0].loc[0].x1 = rect.right();

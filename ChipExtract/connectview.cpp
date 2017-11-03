@@ -577,26 +577,26 @@ void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
 void ConnectView::cell_train(int i1, int i2, int i3, int i4, float f1, float f2, float f3)
 {
     qInfo("Accept cell train: p1=%f, p2=%f, p3=%f", f1, f2, f3);
-    //QPoint p0(1551572, 255590), p1(1565716, 259494);
-    //emit train_cell(1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
     vector<ElementObj*> tr;
     odb.get_objects(OBJ_AREA, AREA_LEARN_MASK, QRect(0, 0, pcst->tot_width_pixel(), pcst->tot_height_pixel()), tr);
     QPoint p0 = pcst->pixel2bu(tr[0]->p0);
     QPoint p1 = pcst->pixel2bu(tr[0]->p1);
-    emit train_cell(prj_file, 1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);     
+    //emit train_cell(prj_file, 1, 255, 255, 255, POWER_UP_L, QRect(p0, p1), f1, f2, f3);
+    emit train_cell(prj_file, tr[0]->type3, 255, 255, 255, POWER_LEFT_U, QRect(p0, p1), f1, f2, f3);
 }
 
 void ConnectView::cell_extract(int i1, int i2, int i3, int i4, float f1, float f2, float f3)
 {    
     qInfo("Accept cell extract: p1=%f, p2=%f, p3=%f", f1, f2, f3);
     SearchRects * sr = new SearchRects;
-    sr->dir.push_back(POWER_UP | POWER_DOWN);
+    sr->dir.push_back(POWER_LEFT | POWER_RIGHT);
     vector<ElementObj*> er;
 	odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, QRect(0, 0, pcst->tot_width_pixel(), pcst->tot_height_pixel()), er);
     QPoint p0 = pcst->pixel2bu(er[0]->p0);
     QPoint p1 = pcst->pixel2bu(er[0]->p1);
     sr->rects.push_back(QRect(p0, p1));
-    emit extract_cell(prj_file, 1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+    //emit extract_cell(prj_file, 1, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
+    emit extract_cell(prj_file, er[0]->type3, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
 }
 
 void ConnectView::wire_extract(VWSearchRequest & vp)
