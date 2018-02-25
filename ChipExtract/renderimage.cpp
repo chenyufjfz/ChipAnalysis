@@ -236,8 +236,10 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	//check if prj is new, if yes, open prj
 	if (bk_img.isNull()) {
 		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
-		if (bk_img.isNull())
+        if (bk_img.isNull()) {
+            qCritical("open prj %s fail!", prj.c_str());
 			return;
+        }
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
 		bk_img->getBlockNum(bx, by);
@@ -247,8 +249,10 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		prj_cnst.reset();
 		bk_img->adjust_cache_size(-CACHE_SIZE);
 		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
-		if (bk_img.isNull())
+        if (bk_img.isNull()) {
+            qCritical("reset and open prj %s fail!", prj.c_str());
 			return;
+        }
 		preimg_map.clear();
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
@@ -339,6 +343,20 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		QRect render_rect_pixel(QPoint(rpixel.left() / w * w, rpixel.top() / h * h),
 			QPoint(rpixel.right() / w * w + w - 1, rpixel.bottom() / h * h + h - 1));
 		QRect render_rect = prj_cnst.pixel2bu(render_rect_pixel);
+        if (rt == PRINT_SCREEN_NO_RETURN) {
+            QRect source((double)image.width() * (rect.left() - render_rect.left()) / render_rect.width(),
+                (double)image.height()* (rect.top() - render_rect.top()) / render_rect.height(),
+                (double)image.width() * rect.width() / render_rect.width(),
+                (double)image.height()* rect.height() / render_rect.height());
+            QImage match_img = image.copy(source);
+            char s[50];
+            sprintf(s, "sc_%d_%d_M", rpixel.top() / h, rpixel.left() / w);
+            QString filename(s);
+            filename.append('0' + layer);
+            filename.append(".jpg");
+            match_img.save(filename, "JPG");
+            return;
+        }
 		if (rt != RETURN_EXACT_MATCH) {
 			preimg_map = curimg_map;
 			prev_img = image;			

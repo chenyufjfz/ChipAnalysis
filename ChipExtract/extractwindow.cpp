@@ -26,6 +26,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_actionTrain_triggered()
 {
+    ParamDialog param_dlg;
     if (param_dlg.exec() == QDialog::Accepted) {
 		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 		Q_ASSERT(connect_view != NULL);
@@ -37,6 +38,7 @@ void MainWindow::on_actionTrain_triggered()
 
 void MainWindow::on_actionExtract_triggered()
 {
+    ParamDialog param_dlg;
     if (param_dlg.exec() == QDialog::Accepted) {
 		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 		Q_ASSERT(connect_view != NULL);
@@ -79,7 +81,7 @@ void MainWindow::on_actionLoad_Objects_triggered()
 void MainWindow::mouse_change(QPoint pos, QString msg)
 {
     char s[200];
-    sprintf(s, "x:%d,y:%d, %s", pos.x(), pos.y(), msg.toStdString().c_str());
+    sprintf(s, "x%3d:%d,y%3d:%d, %s", pos.x() / 1024, pos.x(), pos.y() /1024, pos.y(), msg.toStdString().c_str());
     status_label->setText(s);
 }
 

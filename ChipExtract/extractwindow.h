@@ -44,7 +44,6 @@ private slots:
     void on_actionNext_View_triggered();
 
 private:
-    ParamDialog param_dlg;
     QLabel *status_label;
     Ui::MainWindow *ui;
 

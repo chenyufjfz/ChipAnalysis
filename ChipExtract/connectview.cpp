@@ -94,7 +94,10 @@ void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
         painter.drawRect(QRect(p0, p1));
         break;
     case OBJ_LINE:
-        painter.setPen(QPen(Qt::blue, 1));
+        if (obj.prob > 0.9)
+            painter.setPen(QPen(Qt::blue, 1));
+        else
+            painter.setPen(QPen(Qt::yellow, 1));
         if (obj.type3 == bk_layer)
             painter.drawLine(p0, p1);        
         break;
@@ -136,22 +139,28 @@ void ConnectView::draw_element(QPainter &painter)
 	}
 
     odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, view_rect, rst);
-    painter.setPen(QPen(Qt::blue, 1));
+    bool draw_wire_end = (view_rect.height() < 800);
     painter.setBrush(QBrush(Qt::NoBrush));
     if (rst.size()!=0)
         qDebug("draw %d lines", rst.size());
     for (unsigned i = 0; i < rst.size(); i++) {
         if (rst[i]->type3 == bk_layer) {
+            if (rst[i]->prob > 0.9)
+                painter.setPen(QPen(Qt::blue, 1));
+            else
+                painter.setPen(QPen(Qt::yellow, 1));
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
             QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p1.y() - view_rect.top()) / view_rect.height());
             painter.drawLine(p0, p1);
+            if (draw_wire_end)
+                painter.drawEllipse(p1, 2, 2);
         }
     }
 
     odb.get_objects(OBJ_POINT, POINT_VIA_AUTO_EXTRACT_MASK, view_rect, rst);
-    painter.setPen(QPen(Qt::green, 1, Qt::DotLine));
+    painter.setPen(QPen(Qt::green, 2, Qt::DashLine));
     painter.setBrush(QBrush(Qt::NoBrush));
     if (rst.size()!=0)
         qDebug("draw %d vias", rst.size());
@@ -159,7 +168,7 @@ void ConnectView::draw_element(QPainter &painter)
         if (rst[i]->type3 == bk_layer) {
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
-            painter.drawEllipse(p0, 9, 9);
+            painter.drawEllipse(p0, 5, 5);
         }
     }
 
@@ -184,12 +193,12 @@ void ConnectView::paintEvent(QPaintEvent *)
 			view_rect.adjust(0, view_rect.height() - pcst->tot_height_pixel(), 0, 0);
 		if (view_rect.left() < 0)
 			view_rect.moveLeft(0);
-		if (view_rect.right() > pcst->tot_width_pixel())
-			view_rect.moveRight(pcst->tot_width_pixel());
+		if (view_rect.right() >= pcst->tot_width_pixel())
+			view_rect.moveRight(pcst->tot_width_pixel() - 1);
 		if (view_rect.top() < 0)
 			view_rect.moveTop(0);
-		if (view_rect.bottom() > pcst->tot_height_pixel())
-			view_rect.moveBottom(pcst->tot_height_pixel());
+		if (view_rect.bottom() >= pcst->tot_height_pixel())
+			view_rect.moveBottom(pcst->tot_height_pixel() - 1);
 		Q_ASSERT(view_rect.left() >= 0 && view_rect.right() <= pcst->tot_width_pixel() &&
 			view_rect.top() >= 0 && view_rect.bottom() <= pcst->tot_height_pixel());
 		if (ds != DISPLAY1) {
@@ -440,6 +449,9 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
 			else
 				ds = DISPLAY1;
 		break;
+    case Qt::Key_P:
+        emit render_bkimg(prj_file, bk_layer, pcst->pixel2bu(view_rect), size(), PRINT_SCREEN_NO_RETURN, this, true);
+        return;
     default:
         QWidget::keyPressEvent(e);
         return;

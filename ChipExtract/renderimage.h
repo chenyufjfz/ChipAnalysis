@@ -14,7 +14,8 @@ typedef unsigned long long MapID;
 typedef enum {
     RETURN_UNTIL_ALL_READY,  //Return image when all clear subimages are ready, request may be sent to server and wait all clear subimage ready, caller get only one return, and may wait several seconds.
     RETURN_WHEN_PART_READY,  //Return image immediately, if clear subimage is not ready use blur image instead, and then request may be sent to server and wait all subimage ready, and then return more clear image to caller. So caller may get two or more return. One return is immediate blur image, Another return is clear image after several seconds.
-	RETURN_EXACT_MATCH,
+    RETURN_EXACT_MATCH,      //Return image exactly match with request, RETURN_UNTIL_ALL_READY and RETURN_WHEN_PART_READY normally return larger
+    PRINT_SCREEN_NO_RETURN,  //Save Image to screen and not return
     NO_NEED_RETURN			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
 } RenderType;
 

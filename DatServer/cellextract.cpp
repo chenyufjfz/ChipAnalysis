@@ -13,7 +13,7 @@ static string get_time_str()
 static void deldir(const string &path)
 {
 	if (path.empty())
-		return;
+        return;
 
 	QDir dir(QString::fromStdString(path));
 	if (!dir.exists())

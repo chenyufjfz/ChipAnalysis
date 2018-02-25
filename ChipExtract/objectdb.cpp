@@ -206,18 +206,26 @@ int ObjectDB::load_objets(string file_name)
         unsigned t;
         int x0, y0, x1, y1, n;
         bool pass = true;
+        float prob;
         fgets(line, sizeof(line), fp);
         switch (line[0]) {
         case 'w':
-            n = sscanf(line, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d)", &t, &x0, &y0, &x1, &y1);
-            pass = (n==5);
+            n = sscanf(line, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d), prob=%f", &t, &x0, &y0, &x1, &y1, &prob);
+            if (n==4)
+                prob=1;
             t = OBJ_LINE << 16 | LINE_WIRE_AUTO_EXTRACT << 8 | t;
             break;
         case 'v':
-            n = sscanf(line, "via, l=%d, x=%d, y=%d", &t, &x0, &y0);
+            n = sscanf(line, "via, l=%d, x=%d, y=%d, prob=%f", &t, &x0, &y0, &prob);
             x1 = x0, y1 = y0;
-            pass = (n==3);
+            if (n==3)
+                prob=1;
             t = OBJ_POINT << 16 | POINT_VIA_AUTO_EXTRACT << 8 | t;
+            break;
+        case 'c':
+            n = sscanf(line, "cell, l=%d, (x=%d,y=%d)->(x=%d,y=%d)", &t, &x0, &y0, &x1, &y1);
+            pass = (n==5);
+            t = OBJ_AREA << 16 | AREA_CELL << 8 | t;
             break;
         }
 
@@ -229,6 +237,7 @@ int ObjectDB::load_objets(string file_name)
         obj.type3 = obj.type3;//TODO repair me
         obj.type2 = t >> 8 & 0xff;
         obj.type = t >> 16 & 0xff;
+        obj.prob = prob;
         add_object(obj);
     }
     fclose(fp);

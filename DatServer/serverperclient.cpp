@@ -236,18 +236,21 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             FILE * fp;
             int scale = 32768 / bk_img->getBlockWidth();
             fp = fopen("result.txt", "w");
-            for (int i = 0; i < objs.size(); i++) {
-                unsigned t = objs[i].type;
-                if (t == OBJ_POINT) {
-                    fprintf(fp, "via, l=%d, x=%d, y=%d\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale);
+            if (fp!=NULL) {
+                for (int i = 0; i < objs.size(); i++) {
+                    unsigned t = objs[i].type;
+                    if (t == OBJ_POINT) {
+                        fprintf(fp, "via, l=%d, x=%d, y=%d, prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale,
+                                objs[i].p0.y() / scale, objs[i].prob);
+                    }
+                    else {
+                        fprintf(fp, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d), prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale,
+                            objs[i].p1.x() / scale, objs[i].p1.y() / scale, objs[i].prob);
+                    }
+                    continue;
                 }
-                else {
-                    fprintf(fp, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d)\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale,
-                        objs[i].p1.x() / scale, objs[i].p1.y() / scale);
-                }
-                continue;
+                fclose(fp);
             }
-            fclose(fp);
 #endif
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
