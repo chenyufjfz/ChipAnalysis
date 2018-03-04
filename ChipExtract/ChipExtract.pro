@@ -33,7 +33,8 @@ SOURCES += main.cpp\
     paramdialog.cpp \
     searchobject.cpp \
     extractparam.cpp \
-    objectdb.cpp
+    objectdb.cpp \
+    gotodialog.cpp
 
 HEADERS  += extractwindow.h \
     clientthread.h \
@@ -42,11 +43,13 @@ HEADERS  += extractwindow.h \
     paramdialog.h \
     searchobject.h \
     extractparam.h \
-    objectdb.h
+    objectdb.h \
+    gotodialog.h
 
 FORMS    += \
     extractwindow.ui \
-    paramdialog.ui
+    paramdialog.ui \
+    gotodialog.ui
 
 DESTDIR = $$_PRO_FILE_PWD_/../app
 

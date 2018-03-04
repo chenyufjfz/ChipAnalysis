@@ -7,7 +7,6 @@
 #include <QStackedWidget>
 #include "renderimage.h"
 #include "connectview.h"
-#include "paramdialog.h"
 #include "searchobject.h"
 
 namespace Ui {
@@ -42,6 +41,8 @@ private slots:
     void on_actionClose_View_triggered();
 
     void on_actionNext_View_triggered();
+
+    void on_actionGoTo_triggered();
 
 private:
     QLabel *status_label;

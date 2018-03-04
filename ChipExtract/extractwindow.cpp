@@ -1,6 +1,8 @@
 #include "extractwindow.h"
 #include "ui_extractwindow.h"
 #include "clientthread.h"
+#include "paramdialog.h"
+#include "gotodialog.h"
 #include <QFileDialog>
 #include <time.h>
 
@@ -198,4 +200,13 @@ void MainWindow::on_actionNext_View_triggered()
 		return;
 	int idx = (views.currentIndex() + 1) % views.count();
 	views.setCurrentIndex(idx);
+}
+
+void MainWindow::on_actionGoTo_triggered()
+{
+    GoToDialog goto_dlg;
+    if (goto_dlg.exec() == QDialog::Accepted) {
+        ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+        connect_view->goto_xy(goto_dlg.x, goto_dlg.y);
+    }
 }

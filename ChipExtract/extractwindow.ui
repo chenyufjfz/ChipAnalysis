@@ -20,7 +20,7 @@
      <x>0</x>
      <y>0</y>
      <width>400</width>
-     <height>21</height>
+     <height>26</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuEdit">
@@ -40,6 +40,7 @@
      <string>Tools</string>
     </property>
     <addaction name="actionMonkeyTest"/>
+    <addaction name="actionGoTo"/>
    </widget>
    <widget class="QMenu" name="menuProject">
     <property name="title">
@@ -110,6 +111,11 @@
   <action name="actionNext_View">
    <property name="text">
     <string>Next View</string>
+   </property>
+  </action>
+  <action name="actionGoTo">
+   <property name="text">
+    <string>GoTo</string>
    </property>
   </action>
  </widget>

@@ -485,6 +485,14 @@ void ConnectView::set_mark(unsigned char type, unsigned char type2)
     setFocus();
 }
 
+void ConnectView::goto_xy(int x, int y)
+{
+    center.setX(x);
+    center.setY(y);
+    qDebug("Goto s=%5.2f c=(%d,%d)", scale, center.x(), center.y());
+    update();
+}
+
 void ConnectView::clear_objs()
 {
     odb.clear_all();
