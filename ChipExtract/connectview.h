@@ -41,6 +41,8 @@ signals:
 	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
 	void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect);
+    void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt,
+                    int gray_th, int channel, int scale, int x, int y);
     void mouse_change(QPoint pos, QString msg);
 
 public slots:
@@ -50,11 +52,14 @@ public slots:
                            QImage image, bool finish, const void * view);
     void extract_cell_done(QSharedPointer<SearchResults> prst);
     void extract_wire_via_done(QSharedPointer<SearchResults> prst);
+    void extract_single_wire_done(QSharedPointer<SearchResults> prst);
 
 public:
     void cell_train(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
     void cell_extract(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
 	void wire_extract(VWSearchRequest & vp);
+    void single_wire_extract(int layer, int wmin, int wmax, int opt,
+                             int gray_th, int channel, QPoint org);
     void load_objects(string file_name);
     void set_mark(unsigned char type, unsigned char type2);
     void clear_objs();

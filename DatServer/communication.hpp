@@ -8,6 +8,7 @@
 #define ENABLE_CHECK_SUM		0
 #define BKIMAGE_STREAM			0
 #define ELEMENT_STREAM			1
+#define SINGLE_WIRE_STREAM      2
 
 typedef unsigned long long CHECKSUM_TYPE;
 enum GameMessages
@@ -21,6 +22,7 @@ enum SEARCH_COMMAND
     CELL_TRAIN,
     CELL_EXTRACT,
     VW_EXTRACT,
+    SINGLE_WIRE_EXTRACT,
 	SHUT_DOWN
 };
 
@@ -42,7 +44,7 @@ typedef struct {
 typedef struct {	
     unsigned char typeId;
     unsigned char command;
-	char prj_file[256];
+    unsigned char prj_file[256];
 	unsigned int token;
     unsigned short req_search_num;
     ReqSearchParam params[0];

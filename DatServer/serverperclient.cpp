@@ -122,12 +122,12 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 					else
 						qCritical("cell_extract_req Receive layer[%d]=%d, invalid", i, layer[i]);                    
 					//send response
-					unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
+                    unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
 					RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
 					rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
 					rsp_pkt->command = CELL_EXTRACT;
 					rsp_pkt->token = req_pkt->token;
-					rsp_pkt->rsp_search_num = objs.size();
+                    rsp_pkt->rsp_search_num = (unsigned) objs.size();
 					Location * ploc = &(rsp_pkt->result[0]);
 					for (unsigned j = 0; j < objs.size(); j++) {
 						ploc[j].x0 = objs[j].p0.x();
@@ -151,11 +151,13 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 VWExtractService::VWExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
 	token = _token;
+    vwe_single = VWExtract::create_extract(1);
 	qInfo("VWExtract for token:%d is created", token);
 }
 
 VWExtractService::~VWExtractService()
 {
+    delete vwe_single;
 	qInfo("VWExtract for token:%d is destroyed", token);
 }
 
@@ -169,7 +171,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
     switch (req_pkt->command) {
     case VW_EXTRACT:
         if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
-            qCritical("receive cell extract req length error!");
+            qCritical("receive vw extract req length error!");
         else {
             ReqSearchParam * pa = &(req_pkt->params[0]);
             vector<ICLayerWrInterface *> pic;
@@ -182,12 +184,12 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 				if (pa[i].parami[0]>=0)
 					layer_sets.insert(pa[i].parami[0]);
 			for (set<int>::iterator it = layer_sets.begin(); it != layer_sets.end(); it++) {
-				anti_map_layer[*it] = map_layer.size();
+                anti_map_layer[*it] = (int) map_layer.size();
                 int l = -1;
                 for (int i = 0; i < bk_img->getLayerNum(); i++) {
                     string layer_name = bk_img->getLayerName(i);
-                    int t = layer_name.find_last_of('.');
-                    int h = layer_name.find_last_of('M', t);
+                    int t = (int) layer_name.find_last_of('.');
+                    int h = (int) layer_name.find_last_of('M', t);
                     string sub = layer_name.substr(h + 1, t - h - 1);
                     if (atoi(sub.c_str()) == *it) {
                         l = i;
@@ -218,7 +220,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 					vwe->set_extract_param(pa[l].parami[0], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
 						pa[l].parami[5], pa[l].parami[6], pa[l].parami[7], pa[l].parami[8], pa[l].paramf);                
 				
-                qInfo("extract l=%d, i0=%x,i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,i7=%x,i8=%x,f=%f", anti_map_layer[pa[l].parami[0]],
+                qInfo("extract vw l=%d, i0=%x,i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,i7=%x,i8=%x,f=%f", anti_map_layer[pa[l].parami[0]],
 					  pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
                       pa[l].parami[5], pa[l].parami[6], pa[l].parami[7], pa[l].parami[8], pa[l].paramf);
                 QRect rect(QPoint(pa[l].loc[0].x0, pa[l].loc[0].y0), QPoint(pa[l].loc[0].x1, pa[l].loc[0].y1));
@@ -253,12 +255,12 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             }
 #endif
             //send response
-            unsigned rsp_len = sizeof(RspSearchPkt) + objs.size() * sizeof(Location);
+            unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
             RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
             rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
             rsp_pkt->command = VW_EXTRACT;
 			rsp_pkt->token = req_pkt->token;
-            rsp_pkt->rsp_search_num = objs.size();
+            rsp_pkt->rsp_search_num = (unsigned) objs.size();
             Location * ploc = &(rsp_pkt->result[0]);
             for (unsigned j = 0; j < objs.size(); j++) {
                 ploc[j].x0 = objs[j].p0.x();
@@ -271,6 +273,49 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             }
             rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
                 RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
+            free(rsp_pkt);
+        }
+        break;
+    case SINGLE_WIRE_EXTRACT:
+        if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
+            qCritical("receive single extract req length error!");
+        else {
+            ReqSearchParam * pa = &(req_pkt->params[0]);
+            vector<ICLayerWrInterface *> pic;
+            vector<SearchArea> search;
+            vector<MarkObj> objs;
+            vwe_single->set_extract_param(pa[0].parami[0], pa[0].parami[1], pa[0].parami[2], pa[0].parami[3], pa[0].parami[4],
+                    pa[0].parami[5], pa[0].parami[6], pa[0].parami[7], pa[0].parami[8], pa[0].paramf);
+            qInfo("extract single wire l=%d, i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,x0=%d,y0=%d,f=%f",
+                  pa[0].parami[0], pa[0].parami[1], pa[0].parami[2], pa[0].parami[3], pa[0].parami[4],
+                  pa[0].parami[5], pa[0].parami[6], pa[0].loc[0].x0, pa[0].loc[0].y0, pa[0].paramf);
+            QRect rect(QPoint(pa[0].loc[0].x0, pa[0].loc[0].y0), QPoint(pa[0].loc[0].x1, pa[0].loc[0].y1));
+            search.push_back(SearchArea(rect, 0));
+            pic.push_back(bk_img->get_layer(pa[0].parami[0]));
+            if (pic.back() == NULL) {
+                qCritical("vw_extract_req receive layer=%d, invalid", pa[0].parami[0]);
+                return;
+            }
+            vwe_single->extract(pic, search, objs);
+            //send response
+            unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
+            RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
+            rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
+            rsp_pkt->command = SINGLE_WIRE_EXTRACT;
+            rsp_pkt->token = req_pkt->token;
+            rsp_pkt->rsp_search_num = (unsigned) objs.size();
+            Location * ploc = &(rsp_pkt->result[0]);
+            for (unsigned j = 0; j < objs.size(); j++) {
+                ploc[j].x0 = objs[j].p0.x();
+                ploc[j].y0 = objs[j].p0.y();
+                ploc[j].x1 = objs[j].p1.x();
+                ploc[j].y1 = objs[j].p1.y();
+                unsigned short t = objs[j].type;
+                ploc[j].opt = t << 8 | objs[j].type3;
+                ploc[j].prob = objs[j].prob;
+            }
+            rak_peer->Send((char*)rsp_pkt, rsp_len, IMMEDIATE_PRIORITY,
+                RELIABLE_ORDERED, SINGLE_WIRE_STREAM, cli_addr, false);
             free(rsp_pkt);
         }
         break;
@@ -333,7 +378,7 @@ void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
 	switch (req_pkt->typeId) {
     case ID_REQUIRE_OBJ_SEARCH:
 		if (req_pkt->command != SHUT_DOWN) {
-			string prj(&req_pkt->prj_file[1], req_pkt->prj_file[0]);
+            string prj((char*) &req_pkt->prj_file[1], (unsigned) req_pkt->prj_file[0]);
             if (iter->second.bk_img.isNull() || iter->second.bk_img->get_prj_name() != prj) {
 				iter->second.bk_img = bkimg_faty.open(prj, 0);
                 if (iter->second.bk_img.isNull())
@@ -347,7 +392,9 @@ void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
 			emit cell_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
             break;
         case VW_EXTRACT:
-			emit vw_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
+        case SINGLE_WIRE_EXTRACT:
+            qInfo("Receive request vwextract %s", packet->data[1]==VW_EXTRACT ? "area" : "single");
+            emit vw_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
             break;
 		case SHUT_DOWN:
 			iter->second.ce_service->deleteLater();

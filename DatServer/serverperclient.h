@@ -28,6 +28,7 @@ public slots:
 class VWExtractService : public QObject {
     Q_OBJECT
 protected:
+    VWExtract * vwe_single;
 	unsigned token;
 
 public:

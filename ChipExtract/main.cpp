@@ -37,9 +37,7 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
             break;
         case QtWarningMsg:
             fprintf(fp, "<W>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
-#if QMSG_FLUSH
             fflush(fp);
-#endif
             break;
         case QtCriticalMsg:
             fprintf(fp, "<E>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));

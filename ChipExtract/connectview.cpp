@@ -1,7 +1,7 @@
 #include "connectview.h"
 #include <QPainter>
 #include <QMessageBox>
-
+#include <QGuiApplication>
 extern ObjectDB odb;
 //following parameter is for view_rect move
 const int step_para =3;
@@ -513,6 +513,10 @@ void ConnectView::mouseMoveEvent(QMouseEvent *event)
 void ConnectView::mousePressEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
+    if (QGuiApplication::queryKeyboardModifiers() == Qt::ControlModifier) {
+        single_wire_extract(bk_layer, 5, 128, 0, 50, 0, mp);
+        return;
+    }
     if (ms.state == CREATE_NEW_OBJ) {
         ms.draw_obj.type = ms.type;
         ms.draw_obj.type2 = ms.type2;
@@ -583,6 +587,17 @@ void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
     QMessageBox::about(this, "Extract cell done", "Extract cell done");
 }
 
+void ConnectView::extract_single_wire_done(QSharedPointer<SearchResults> prst)
+{
+    for (int i = 0; i < prst->objs.size(); i++) {
+        ElementObj obj(prst->objs[i]);
+        obj.p0 = pcst->bu2pixel(obj.p0);
+        obj.p1 = pcst->bu2pixel(obj.p1);
+        odb.add_object(obj);
+    }
+    update();
+}
+
 void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
 {
     for (int i = 0; i < prst->objs.size(); i++) {
@@ -627,4 +642,18 @@ void ConnectView::wire_extract(VWSearchRequest & vp)
 	QPoint p1 = pcst->pixel2bu(er[0]->p1);
 	VWSearchRequest * preq = new VWSearchRequest(vp);
 	emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
+}
+
+void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
+                         int gray_th, int channel, QPoint org)
+{
+    opt =0;
+    int s=0;
+    int w=3000;
+    while (view_rect.width()>w || view_rect.height()>w) {
+        w=w<<1;
+        s++;
+    }
+    QPoint p =pcst->pixel2bu(org);
+    emit extract_single_wire(prj_file, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y());
 }

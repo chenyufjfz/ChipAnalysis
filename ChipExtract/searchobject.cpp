@@ -56,7 +56,13 @@ void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy
 		qFatal("Connect extract_wire_via fail");
 	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
-		qFatal("Connect extract_wire_via_done fail");	
+        qFatal("Connect extract_wire_via_done fail");
+    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int)),
+        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int))))
+        qFatal("Connect extract_single_wire fail");
+    if (!connect(search_object, SIGNAL(extract_single_wire_done(QSharedPointer<SearchResults>)),
+        pobj, SLOT(extract_single_wire_done(QSharedPointer<SearchResults>))))
+        qFatal("Connect extract_single_wire_done fail");
 
 	if (!connect(&ct, SIGNAL(search_packet_arrive(QSharedPointer<RakNet::Packet>)), search_object, SLOT(search_packet_arrive(QSharedPointer<RakNet::Packet>))))
 		qFatal("Connect search_packet_arrive fail");
@@ -216,9 +222,13 @@ int SearchObject::try_server(bool resel)
 void SearchObject::process_req_queue()
 {
 	if (token != 0 && !req_queue.empty()) { //if connected and req_queue not empty, send one request
-		req_queue.begin()->req_pkt->token = token;
-		rak_peer->Send((char *)req_queue.begin()->req_pkt.data(), req_queue.begin()->req_len, HIGH_PRIORITY,
-			RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
+        req_queue.begin()->req_pkt->token = token;
+        if (req_queue.begin()->req_pkt->command == SINGLE_WIRE_EXTRACT)
+            rak_peer->Send((char *)req_queue.begin()->req_pkt.data(), req_queue.begin()->req_len, IMMEDIATE_PRIORITY,
+                RELIABLE_ORDERED, SINGLE_WIRE_STREAM, server_addr, false);
+        else
+            rak_peer->Send((char *)req_queue.begin()->req_pkt.data(), req_queue.begin()->req_len, HIGH_PRIORITY,
+                RELIABLE_ORDERED, ELEMENT_STREAM, server_addr, false);
 		req_queue.erase(req_queue.begin());
 	}
 }
@@ -240,8 +250,8 @@ void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, un
 	ReqSearch rs;
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
-	rs.req_pkt->prj_file[0] = prj.length();
-	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+    rs.req_pkt->prj_file[0] = (unsigned char) prj.length();
+    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = CELL_TRAIN;
 	rs.req_pkt->req_search_num = 1;
@@ -276,10 +286,10 @@ void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, 
 			return;
 	}
 	ReqSearch rs;
-    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) + (prect->rects.size() -1) * sizeof(Location);
+    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) + (prect->rects.size() -1) * (unsigned) sizeof(Location);
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
 	rs.req_pkt->prj_file[0] = prj.length();
-	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = CELL_EXTRACT;
 	rs.req_pkt->req_search_num = prect->rects.size();
@@ -321,7 +331,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * preq->lpa.size();
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
 	rs.req_pkt->prj_file[0] = prj.length();
-	strcpy(&(rs.req_pkt->prj_file[1]), prj.c_str());
+    strcpy((char*) &(rs.req_pkt->prj_file[1]), prj.c_str());
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = VW_EXTRACT;
 	rs.req_pkt->req_search_num = preq->lpa.size();
@@ -354,6 +364,51 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
     pa[0].loc[0].y1 = rect.bottom();
 	req_queue.push_back(rs);
 	process_req_queue();
+}
+
+void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y)
+{
+    if (prj.length() > 255) {
+        qCritical("extract_single_wire prj name too long:%s", prj.c_str());
+        return;
+    }
+    if (get_host_name(prj) != prj_host) {
+        prj_host = get_host_name(prj);
+        req_queue.clear();
+        if (try_server(true) < 0)
+            return;
+    }
+    if (!req_queue.empty()) {
+        qWarning("extract_single_wire previous wire or cell extract is not finished");
+        return;
+    }
+    qInfo("extract_single_wire l=%d, wmin=%d, wmax=%d, ihigh=%d, opt=%d, gray_th=%d, channel=%d, scale=%d, x=%d, y=%d",
+          layer, wmin, wmax, ihigh, opt, gray_th, channel, scale, x, y);
+    if (wmin > 200 || wmax>1000 || ihigh > 20 || opt > 255 || gray_th>100 || channel > 3 || scale > 255
+        || wmin < 0 || wmax < 0 || ihigh < 0 || opt < 0 || gray_th<0 || channel < 0 || scale < 0) {
+        qWarning("extract_single_wire invalid param");
+        return;
+    }
+    ReqSearch rs;
+    rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
+    rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+    rs.req_pkt->prj_file[0] = prj.length();
+    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
+    rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+    rs.req_pkt->command = SINGLE_WIRE_EXTRACT;
+    rs.req_pkt->req_search_num = 1;
+    rs.req_pkt->params[0].parami[0] = layer;
+    rs.req_pkt->params[0].parami[1] = 0xffffffff;
+    rs.req_pkt->params[0].parami[2] = wmax << 16 | wmin;
+    rs.req_pkt->params[0].parami[3] = channel << 24 | gray_th << 16 | opt << 8 | ihigh;
+    rs.req_pkt->params[0].parami[4] = scale;
+    rs.req_pkt->params[0].loc[0].opt = 0;
+    rs.req_pkt->params[0].loc[0].x0 = x;
+    rs.req_pkt->params[0].loc[0].y0 = y;
+    rs.req_pkt->params[0].loc[0].x1 = x;
+    rs.req_pkt->params[0].loc[0].y1 = y;
+    req_queue.push_back(rs);
+    process_req_queue();
 }
 
 void SearchObject::server_connected(QSharedPointer<RakNet::Packet> packet)
@@ -426,6 +481,7 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
         emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
     case VW_EXTRACT:
+    case SINGLE_WIRE_EXTRACT:
         for (unsigned i = 0; i < rsp_pkt->rsp_search_num; i++) {
             MarkObj obj;
             unsigned short t = rsp_pkt->result[i].opt;
@@ -437,10 +493,14 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
             obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);
             obj.p1 = QPoint(rsp_pkt->result[i].x1, rsp_pkt->result[i].y1);
             prst->objs.push_back(obj);
-            qInfo("extract l=%d, (%d,%d)_(%d,%d)  p=%f, type=%d", obj.type3,
+            if (rsp_pkt->command == SINGLE_WIRE_EXTRACT)
+                qInfo("single wire extract l=%d, (%d,%d)_(%d,%d)  p=%f, type=%d", obj.type3,
                   obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y(), obj.prob, obj.type);
         }
-        emit extract_wire_via_done(QSharedPointer<SearchResults>(prst, search_result_del));
+        if (rsp_pkt->command == VW_EXTRACT)
+            emit extract_wire_via_done(QSharedPointer<SearchResults>(prst, search_result_del));
+        else
+            emit extract_single_wire_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
     default:
         qCritical("Response command error %d!", rsp_pkt->command);

@@ -70,6 +70,7 @@ public:
 signals:
     void extract_cell_done(QSharedPointer<SearchResults>);
     void extract_wire_via_done(QSharedPointer<SearchResults>);
+    void extract_single_wire_done(QSharedPointer<SearchResults>);
 	void server_found();
 	void server_lost();
 
@@ -85,6 +86,7 @@ public slots:
 	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
 	void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect);
+    void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y);
 
 protected:
 	static bool inited;

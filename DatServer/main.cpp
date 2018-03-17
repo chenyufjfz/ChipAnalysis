@@ -47,7 +47,7 @@ void print_stack(void) {
     if (NULL == strings)
     {
         perror("backtrace_synbols");
-        Exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     printf ("Obtained %zd stack frames.\n", size);
@@ -56,7 +56,7 @@ void print_stack(void) {
         printf ("%s\n", strings[i]);
 
     free (strings);
-    　 strings = NULL;
+    strings = NULL;
 }
 #endif
 static FILE * fp = NULL;
@@ -88,6 +88,7 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
             break;
         case QtWarningMsg:
             fprintf(fp, "<W>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
+            fflush(fp);
             break;
         case QtCriticalMsg:
             fprintf(fp, "<E>[%s] %s\n", qPrintable(str_dt), qPrintable(msg));
