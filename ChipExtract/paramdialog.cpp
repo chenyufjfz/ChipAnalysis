@@ -14,11 +14,12 @@ ParamDialog::ParamDialog(QWidget *parent) :
     cell_param2 = 3;
     cell_param3 = 0;
     choose_cell = false;
-
+    parallel = false;
 	ui->file_name->setText(QString::fromStdString(file_name));
 	ui->cell_param1->setText(QString::number(cell_param1));
     ui->cell_param2->setText(QString::number(cell_param2));
     ui->cell_param3->setText(QString::number(cell_param3));	
+    ui->parallel->setChecked(parallel);
 }
 
 ParamDialog::~ParamDialog()
@@ -34,6 +35,7 @@ void ParamDialog::on_pushButton_clicked()
     cell_param1 = ui->cell_param1->text().toDouble();
     cell_param2 = ui->cell_param2->text().toDouble();
     cell_param3 = ui->cell_param3->text().toDouble();
+    parallel = ui->parallel->isChecked();
     accept();
 }
 

@@ -50,7 +50,7 @@ void MainWindow::on_actionExtract_triggered()
 		else {
 			VWSearchRequest vwsr;
 			param_dlg.ep.get_param(param_dlg.action_name, vwsr.lpa);
-			connect_view->wire_extract(vwsr);
+            connect_view->wire_extract(vwsr, param_dlg.parallel ? 1 : 0);
 		}
     }
 

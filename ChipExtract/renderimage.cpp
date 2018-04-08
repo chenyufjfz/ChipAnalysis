@@ -301,7 +301,7 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	QPainter painter(&image);
     vector<QFuture<DecodeImg> > subimgs;
 	map <MapID, unsigned int> curimg_map;
-	qDebug("Renderimg, s=%d, w=(%d,%d), Rp=(%d,%d,%d,%d) ", scale, w, h, rpixel.left() / w, rpixel.top() / h, rpixel.right() / w, rpixel.bottom() / h);
+    qDebug("Renderimg, l=%d, s=%d, w=(%d,%d), Rp=(%d,%d,%d,%d) ", layer, scale, w, h, rpixel.left() / w, rpixel.top() / h, rpixel.right() / w, rpixel.bottom() / h);
 	for (int x = rpixel.left() / w, x0 = 0; x <= rpixel.right() / w; x++, x0 += prj_cnst.img_block_w())
 		for (int y = rpixel.top() / h, y0 = 0; y <= rpixel.bottom() / h; y++, y0 += prj_cnst.img_block_h()) 
 			if (x >= 0 && x < prj_cnst.num_block_x() && y >= 0 && y < prj_cnst.num_block_y()) {

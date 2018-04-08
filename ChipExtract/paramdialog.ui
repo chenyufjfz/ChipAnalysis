@@ -124,6 +124,19 @@
       <string>...</string>
      </property>
     </widget>
+    <widget class="QCheckBox" name="parallel">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>290</y>
+       <width>151</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>MultiCPU Search</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="Cell">
     <attribute name="title">

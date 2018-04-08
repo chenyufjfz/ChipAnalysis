@@ -503,6 +503,12 @@ void ConnectView::mouseMoveEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
     char s[200] = "";
+
+    if (!render_img.isNull()) {
+        QPoint xy((double) render_img.width() * (mp.x() - render_rect.left()) / render_rect.width(),
+              (double) render_img.height() * (mp.y() - render_rect.top()) / render_rect.height());
+        sprintf(s, " c=%x", render_img.pixel(xy));
+    }
     if (ms.state == CHOOSE_ANO_POINT) {
         ms.draw_obj.p1 = mp;
         update();
@@ -634,14 +640,14 @@ void ConnectView::cell_extract(int i1, int i2, int i3, int i4, float f1, float f
     emit extract_cell(prj_file, er[0]->type3, 255, 255, 255, QSharedPointer<SearchRects>(sr), f1, f2, f3);
 }
 
-void ConnectView::wire_extract(VWSearchRequest & vp)
+void ConnectView::wire_extract(VWSearchRequest & vp, int opt)
 {
 	vector<ElementObj*> er;
 	odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, QRect(0, 0, pcst->tot_width_pixel(), pcst->tot_height_pixel()), er);
 	QPoint p0 = pcst->pixel2bu(er[0]->p0);
 	QPoint p1 = pcst->pixel2bu(er[0]->p1);
 	VWSearchRequest * preq = new VWSearchRequest(vp);
-	emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1));
+    emit extract_wire_via(prj_file, QSharedPointer<VWSearchRequest>(preq), QRect(p0, p1), opt);
 }
 
 void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,

@@ -85,7 +85,7 @@ public slots:
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
 	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
-	void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect);
+    void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
     void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y);
 
 protected:

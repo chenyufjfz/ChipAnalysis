@@ -226,7 +226,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
                 QRect rect(QPoint(pa[l].loc[0].x0, pa[l].loc[0].y0), QPoint(pa[l].loc[0].x1, pa[l].loc[0].y1));
                 if (rect.width()<32768 || rect.height()<32768)
                     continue;
-                search.push_back(SearchArea(rect, 0));
+                search.push_back(SearchArea(rect, pa[l].parami[10]));
                 qInfo("Receive wire&via search request (%d,%d)_(%d,%d)", rect.left(),
                       rect.top(), rect.right(), rect.bottom());
             }

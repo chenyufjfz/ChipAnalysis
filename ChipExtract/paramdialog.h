@@ -20,7 +20,7 @@ public:
     float cell_param2;
     float cell_param3;
     bool choose_cell;
-
+    bool parallel;
 public:
     explicit ParamDialog(QWidget *parent = 0);
     ~ParamDialog();

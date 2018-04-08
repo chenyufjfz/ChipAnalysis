@@ -51,8 +51,8 @@ void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy
 	if (!connect(search_object, SIGNAL(extract_cell_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_cell_done(QSharedPointer<SearchResults>))))
 		qFatal("Connect extract_cell_done fail");
-	if (!connect(pobj, SIGNAL(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect)),
-		search_object, SLOT(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect))))
+    if (!connect(pobj, SIGNAL(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect, int)),
+        search_object, SLOT(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect, int))))
 		qFatal("Connect extract_wire_via fail");
 	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
@@ -240,7 +240,7 @@ void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, un
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
-	if (get_host_name(prj) != prj_host) {
+    if (get_host_name(prj) != prj_host || token==0) {
 		prj_host = get_host_name(prj);
 		req_queue.clear();
 		if (try_server(true) < 0)
@@ -279,7 +279,7 @@ void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, 
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
-	if (get_host_name(prj) != prj_host) {
+    if (get_host_name(prj) != prj_host || token==0) {
 		prj_host = get_host_name(prj);
 		req_queue.clear();
 		if (try_server(true) < 0)
@@ -315,13 +315,13 @@ void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, 
 	process_req_queue();
 }
 
-void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect)
+void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option)
 {
 	if (prj.length() > 255) {
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
-	if (get_host_name(prj) != prj_host) {
+    if (get_host_name(prj) != prj_host || token==0) {
 		prj_host = get_host_name(prj);
 		req_queue.clear();
 		if (try_server(true) < 0)
@@ -337,7 +337,8 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
 	rs.req_pkt->req_search_num = preq->lpa.size();
 	ReqSearchParam * pa = &(rs.req_pkt->params[0]);
 
-    qInfo("extract wire_via %s, x0=%d,y0=%d, w=%d,h=%d", prj.c_str(), rect.left(), rect.top(), rect.width(), rect.height());
+    qInfo("extract wire_via %s, x0=%d,y0=%d, w=%d,h=%d, opt=%d",
+          prj.c_str(), rect.left(), rect.top(), rect.width(), rect.height(), option);
     for (int l=0; l<preq->lpa.size(); l++) {
         pa[l].parami[0] = preq->lpa[l].pi[0];
         pa[l].parami[1] = preq->lpa[l].pi[1];
@@ -362,6 +363,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
     pa[0].loc[0].y0 = rect.top();
     pa[0].loc[0].x1 = rect.right();
     pa[0].loc[0].y1 = rect.bottom();
+    pa[0].parami[10] = option;
 	req_queue.push_back(rs);
 	process_req_queue();
 }
@@ -372,7 +374,7 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
         qCritical("extract_single_wire prj name too long:%s", prj.c_str());
         return;
     }
-    if (get_host_name(prj) != prj_host) {
+    if (get_host_name(prj) != prj_host || token==0) {
         prj_host = get_host_name(prj);
         req_queue.clear();
         if (try_server(true) < 0)
@@ -438,8 +440,9 @@ void SearchObject::server_connected(QSharedPointer<RakNet::Packet> packet)
 void SearchObject::server_disconnected(QSharedPointer<RakNet::Packet> packet)
 {
 	if (packet->systemAddress == server_addr) {
-		if (try_server(true) < 0)
-			req_queue.clear();
+        token = 0;
+        try_server(false);
+        req_queue.clear();
 	}
 }
 
@@ -478,7 +481,8 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
         emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
     case CELL_TRAIN:
-        emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
+        //emit extract_cell_done(QSharedPointer<SearchResults>(prst, search_result_del));
+        search_result_del(prst);
         break;
     case VW_EXTRACT:
     case SINGLE_WIRE_EXTRACT:
