@@ -64,7 +64,7 @@ public:
     void set_mark(unsigned char type, unsigned char type2);
     void clear_objs();
 	void set_prj_file(string _prj_file);
-    void goto_xy(int x, int y);
+    void goto_xy(int x, int y, int layer);
 	string get_prj_file();
 
 protected:

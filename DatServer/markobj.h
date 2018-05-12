@@ -122,5 +122,9 @@ enum {
 #define RULE_NO_DUMY_FILLING	0x4000
 #define RULE_END_WITH_VIA		0x80000000
 #define RULE_EXTEND_VIA_OVERLAP 0x40000000
+
+
+#define SEARCH_NET_MASK			1
+#define SEARCH_DIR_MASK			(1 << 1)
 #endif // MARKOBJ_H
 

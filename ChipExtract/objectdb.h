@@ -41,9 +41,11 @@ protected:
 
 public:
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
+    void get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst);
     void link_object(ElementObj * pobj);
     void delink_object(ElementObj * opbj);
     void clear_all();
+    ~AreaObjLink();
 };
 
 class ObjectDB
@@ -61,7 +63,9 @@ protected:
 
 public:
     ObjectDB();
+    ~ObjectDB();
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
+    void get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst);
     void add_object(ElementObj & obj);
     void del_object(ElementObj * p_obj);
     void clear_all();

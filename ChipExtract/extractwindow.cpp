@@ -7,6 +7,7 @@
 #include <time.h>
 
 extern ClientThread ct;
+extern ObjectDB odb;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -18,6 +19,7 @@ MainWindow::MainWindow(QWidget *parent) :
     status_label->setMinimumSize(200, 20);
     ui->statusBar->addWidget(status_label);
 	monkey_test_id = 0;
+    warning_idx = 0;
     setCentralWidget(&views);
 }
 
@@ -76,8 +78,10 @@ void MainWindow::on_actionLoad_Objects_triggered()
 	Q_ASSERT(connect_view != NULL);
     QString image_file_name = QFileDialog::getOpenFileName( this,
                             "open file",
-                            "C:/chenyu/work/ChipPintu/app/");
+                            "C:/chenyu/work/ChipPintu/ViaWireExtract/");
     connect_view->load_objects(image_file_name.toStdString());
+    warning_objs.clear();
+    warning_idx = 0;
 }
 
 void MainWindow::mouse_change(QPoint pos, QString msg)
@@ -91,6 +95,8 @@ void MainWindow::on_actionClear_Objects_triggered()
 {
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 	Q_ASSERT(connect_view != NULL);
+    warning_objs.clear();
+    warning_idx = 0;
     connect_view->clear_objs();
 }
 
@@ -199,7 +205,7 @@ void MainWindow::on_actionNext_View_triggered()
 	if (views.count() == 1)
 		return;
 	int idx = (views.currentIndex() + 1) % views.count();
-	views.setCurrentIndex(idx);
+    views.setCurrentIndex(idx);
 }
 
 void MainWindow::on_actionGoTo_triggered()
@@ -207,6 +213,27 @@ void MainWindow::on_actionGoTo_triggered()
     GoToDialog goto_dlg;
     if (goto_dlg.exec() == QDialog::Accepted) {
         ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
-        connect_view->goto_xy(goto_dlg.x, goto_dlg.y);
+        connect_view->goto_xy(goto_dlg.x, goto_dlg.y, -1);
     }
+}
+
+void MainWindow::on_actionNextWarning_triggered()
+{
+    if (warning_objs.empty()) {
+		vector<ElementObj*> result;
+        odb.get_objects(OBJ_AREA, AREA_CELL_MASK, 0.9f, warning_objs);
+		odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, 0.9f, result);
+		warning_objs.insert(warning_objs.end(), result.begin(), result.end());
+		odb.get_objects(OBJ_POINT, POINT_VIA_AUTO_EXTRACT_MASK, 0.9f, result);
+		warning_objs.insert(warning_objs.end(), result.begin(), result.end());
+    }
+    if (warning_idx >= (int) warning_objs.size())
+        warning_idx = 0;
+    if (!warning_objs.empty()) {
+        ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+        QPoint p0 = warning_objs[warning_idx]->p0;
+        connect_view->goto_xy(p0.x(), p0.y(), warning_objs[warning_idx]->type3);
+    }
+    warning_idx++;
+
 }

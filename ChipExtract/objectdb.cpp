@@ -25,6 +25,19 @@ void AreaObjLink::get_objects(unsigned char t1, unsigned long long t2_mask, cons
 			if (objs[i]->intersect_rect(r))
 				rst.push_back(objs[i]);
 	}
+    for (int i=0; i<(int) areas.size(); i++)
+        areas[i]->get_objects(t1, t2_mask, r, rst);
+}
+
+void AreaObjLink::get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst)
+{
+    for (int i = 0; i < (int) objs.size(); i++) {
+        if (t1 == objs[i]->type && (t2_mask >> objs[i]->type2) & 1)
+            if (objs[i]->prob <= prob)
+                rst.push_back(objs[i]);
+    }
+    for (int i=0; i<(int) areas.size(); i++)
+        areas[i]->get_objects(t1, t2_mask, prob, rst);
 }
 
 void AreaObjLink::link_object(ElementObj * pobj)
@@ -50,6 +63,12 @@ void AreaObjLink::clear_all()
     objs.clear();
     for (int i=0; i<(int) areas.size(); i++)
         areas[i]->clear_all();
+    areas.clear();
+}
+
+AreaObjLink::~AreaObjLink()
+{
+    clear_all();
 }
 
 ObjectDB::ObjectDB()
@@ -62,6 +81,20 @@ ObjectDB::ObjectDB()
 	root_cell = new AreaObjLink;
 	root_wire = new AreaObjLink;
 	root_via = new AreaObjLink;
+}
+
+ObjectDB::~ObjectDB()
+{
+    for (unsigned i = 0; i < (int) sizeof(layer_wire_info) / sizeof(layer_wire_info[0]); i++)
+        if (layer_wire_info[i])
+            delete layer_wire_info[i];
+    for (unsigned i = 0; i < (int) sizeof(layer_via_info) / sizeof(layer_via_info[0]); i++)
+        if (layer_via_info[i])
+            delete layer_via_info[i];
+    delete root_area;
+    delete root_cell;
+    delete root_wire;
+    delete root_via;
 }
 
 void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst)
@@ -102,6 +135,32 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const Q
 	}
 	
 	
+}
+
+void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst)
+{
+    rst.clear();
+    QMutexLocker locker(&mutex);
+    switch (t1) {
+    case OBJ_AREA:
+        root_area->get_objects(t1, t2_mask, prob, rst);
+        break;
+
+    case OBJ_LINE:
+        if (t2_mask & (LINE_NORMAL_WIRE0_MASK | LINE_NORMAL_WIRE1_MASK | LINE_NORMAL_WIRE2_MASK
+                       | LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK))
+            root_wire->get_objects(t1, t2_mask, prob, rst);
+        break;
+
+    case OBJ_POINT:
+        if (t2_mask & POINT_CELL_MASK)
+            root_cell->get_objects(t1, t2_mask, prob, rst);
+        if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
+                       POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK))
+            root_via->get_objects(t1, t2_mask, prob, rst);
+        break;
+    }
+
 }
 
 void ObjectDB::add_object(ElementObj & obj)

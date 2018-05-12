@@ -8,6 +8,7 @@
 #include "renderimage.h"
 #include "connectview.h"
 #include "searchobject.h"
+#include "objectdb.h"
 
 namespace Ui {
 class MainWindow;
@@ -44,9 +45,13 @@ private slots:
 
     void on_actionGoTo_triggered();
 
+    void on_actionNextWarning_triggered();
+
 private:
     QLabel *status_label;
     Ui::MainWindow *ui;
+    vector<ElementObj*> warning_objs;
+    int warning_idx;
 
 protected:
 	void timerEvent(QTimerEvent *e);

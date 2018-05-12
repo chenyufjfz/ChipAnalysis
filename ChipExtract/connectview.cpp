@@ -102,7 +102,10 @@ void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
             painter.drawLine(p0, p1);        
         break;
     case OBJ_POINT:
-        painter.setPen(QPen(Qt::green, 1, Qt::DotLine));
+        if (obj.prob > 0.9)
+            painter.setPen(QPen(Qt::green, 1, Qt::DotLine));
+        else
+            painter.setPen(QPen(Qt::yellow, 1, Qt::DotLine));
         if (obj.type3 == bk_layer)
             painter.drawEllipse(p0, 9, 9);        
         break;
@@ -485,11 +488,15 @@ void ConnectView::set_mark(unsigned char type, unsigned char type2)
     setFocus();
 }
 
-void ConnectView::goto_xy(int x, int y)
+void ConnectView::goto_xy(int x, int y, int layer)
 {
     center.setX(x);
     center.setY(y);
-    qDebug("Goto s=%5.2f c=(%d,%d)", scale, center.x(), center.y());
+    if (layer > 0 && pcst->num_layer() > layer) {
+        bk_layer = layer;
+        bk_layer_2 = layer;
+    }
+    qDebug("Goto s=%5.2f c=(%d,%d), l=%d", scale, center.x(), center.y(), bk_layer);
     update();
 }
 
