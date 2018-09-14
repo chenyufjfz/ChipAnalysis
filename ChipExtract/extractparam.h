@@ -7,6 +7,8 @@
 #include <string.h>
 using namespace std;
 
+#define EXTRACT_PARAM 1
+
 class ParamItem {
 public:
 	int pi[9];
@@ -56,6 +58,7 @@ public:
 	}
 };
 
+#if EXTRACT_PARAM == 1
 class ExtractParam
 {
 protected:
@@ -78,5 +81,5 @@ public:
 		return !(*this == ep);
 	}
 };
-
+#endif
 #endif // EXTRACTPARAM_H

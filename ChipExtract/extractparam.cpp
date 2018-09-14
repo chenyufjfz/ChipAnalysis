@@ -2,6 +2,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <QtGlobal>
 using namespace cv;
+#if EXTRACT_PARAM == 1
 
 #define PP_SET_PARAM			0
 #define PP_RGB2GRAY				1
@@ -1970,3 +1971,5 @@ bool ExtractParam::operator==(ExtractParam & ep)
     }
     return true;
 }
+
+#endif

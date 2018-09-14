@@ -13,7 +13,9 @@ class ParamDialog : public QDialog
 {
     Q_OBJECT
 public:
+#if EXTRACT_PARAM == 1
 	ExtractParam ep;
+#endif
 	string action_name;
 	string file_name;
     float cell_param1;

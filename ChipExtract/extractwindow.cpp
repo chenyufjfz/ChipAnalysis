@@ -50,9 +50,11 @@ void MainWindow::on_actionExtract_triggered()
             connect_view->cell_extract(0, 0, 0, 0, param_dlg.cell_param1,
                 param_dlg.cell_param2, param_dlg.cell_param3);
 		else {
+#if EXTRACT_PARAM == 1
 			VWSearchRequest vwsr;
 			param_dlg.ep.get_param(param_dlg.action_name, vwsr.lpa);
             connect_view->wire_extract(vwsr, param_dlg.parallel ? 1 : 0);
+#endif
 		}
     }
 

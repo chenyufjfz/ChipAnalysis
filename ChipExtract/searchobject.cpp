@@ -57,8 +57,8 @@ void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy
 	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
         qFatal("Connect extract_wire_via_done fail");
-    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int)),
-        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int))))
+    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float)),
+        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float))))
         qFatal("Connect extract_single_wire fail");
     if (!connect(search_object, SIGNAL(extract_single_wire_done(QSharedPointer<SearchResults>)),
         pobj, SLOT(extract_single_wire_done(QSharedPointer<SearchResults>))))
@@ -368,7 +368,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
 	process_req_queue();
 }
 
-void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y)
+void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg)
 {
     if (prj.length() > 255) {
         qCritical("extract_single_wire prj name too long:%s", prj.c_str());
@@ -384,8 +384,8 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
         qWarning("extract_single_wire previous wire or cell extract is not finished");
         return;
     }
-    qInfo("extract_single_wire l=%d, wmin=%d, wmax=%d, ihigh=%d, opt=%d, gray_th=%d, channel=%d, scale=%d, x=%d, y=%d",
-          layer, wmin, wmax, ihigh, opt, gray_th, channel, scale, x, y);
+    qInfo("extract_single_wire l=%d, wmin=%d, wmax=%d, ihigh=%d, opt=%d, gray_th=%d, channel=%d, scale=%d, x=%d, y=%d, cr=%f, cg=%f",
+          layer, wmin, wmax, ihigh, opt, gray_th, channel, scale, x, y, cr, cg);
     if (wmin > 200 || wmax>1000 || ihigh > 20 || opt > 255 || gray_th>100 || channel > 3 || scale > 255
         || wmin < 0 || wmax < 0 || ihigh < 0 || opt < 0 || gray_th<0 || channel < 0 || scale < 0) {
         qWarning("extract_single_wire invalid param");
@@ -403,7 +403,9 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
     rs.req_pkt->params[0].parami[1] = 0xffffffff;
     rs.req_pkt->params[0].parami[2] = wmax << 16 | wmin;
     rs.req_pkt->params[0].parami[3] = channel << 24 | gray_th << 16 | opt << 8 | ihigh;
-    rs.req_pkt->params[0].parami[4] = scale;
+    int cr_int = 100 * cr;
+    int cg_int = 100 * cg;
+    rs.req_pkt->params[0].parami[4] = (cg_int & 0xff) << 16 | (cr_int & 0xff) << 8 | scale;
     rs.req_pkt->params[0].loc[0].opt = 0;
     rs.req_pkt->params[0].loc[0].x0 = x;
     rs.req_pkt->params[0].loc[0].y0 = y;

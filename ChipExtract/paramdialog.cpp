@@ -51,6 +51,7 @@ void ParamDialog::on_pushButton_2_clicked()
 
 void ParamDialog::on_actions_itemClicked(QListWidgetItem *item)
 {
+#if EXTRACT_PARAM == 1
     QListWidget * param = ui->params;
     int count = param->count();
     for (int i = 0; i < count; i++)
@@ -59,6 +60,7 @@ void ParamDialog::on_actions_itemClicked(QListWidgetItem *item)
 	ep.get_param_sets(item->text().toStdString(), param_items);
 	for (int i = 0; i < param_items.size(); i++)
 		param->addItem(QString::fromStdString(param_items[i]));
+#endif
 }
 
 void ParamDialog::on_lineEdit_editingFinished()
@@ -69,6 +71,7 @@ void ParamDialog::on_lineEdit_editingFinished()
 
 void ParamDialog::update_action()
 {
+#if EXTRACT_PARAM == 1
 	ep.clear();
 	ep.read_file(file_name);
 	QListWidget * action = ui->actions;
@@ -83,7 +86,8 @@ void ParamDialog::update_action()
 	QListWidget * param = ui->params;
 	count = param->count();
 	for (int i = 0; i < count; i++)
-		delete param->takeItem(0);
+        delete param->takeItem(0);
+#endif
 }
 void ParamDialog::on_pushButton_3_clicked()
 {

@@ -452,9 +452,18 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
 			else
 				ds = DISPLAY1;
 		break;
-    case Qt::Key_P:
-        emit render_bkimg(prj_file, bk_layer, pcst->pixel2bu(view_rect), size(), PRINT_SCREEN_NO_RETURN, this, true);
+    case Qt::Key_P: {
+        QImage img;
+        QRect ret;
+        emit render_bkimg_blocking(prj_file, bk_layer, view_rect, size(), RETURN_EXACT_MATCH, ret, img);
+        char s[50];
+        sprintf(s, "sc_%d_%d_M", view_rect.top() / pcst->img_block_h(), view_rect.left() / pcst->img_block_w());
+        QString filename(s);
+        filename.append('0' + bk_layer);
+        filename.append(".jpg");
+        img.save(filename, "JPG");
         return;
+        }
     default:
         QWidget::keyPressEvent(e);
         return;
@@ -527,7 +536,7 @@ void ConnectView::mousePressEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
     if (QGuiApplication::queryKeyboardModifiers() == Qt::ControlModifier) {
-        single_wire_extract(bk_layer, 5, 128, 0, 50, 0, mp);
+        single_wire_extract(bk_layer, 5, 128, 0, 39, 0, mp, -1, -1);
         return;
     }
     if (ms.state == CREATE_NEW_OBJ) {
@@ -658,7 +667,7 @@ void ConnectView::wire_extract(VWSearchRequest & vp, int opt)
 }
 
 void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
-                         int gray_th, int channel, QPoint org)
+                         int gray_th, int channel, QPoint org, float cr, float cg)
 {
     opt =0;
     int s=0;
@@ -668,5 +677,5 @@ void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
         s++;
     }
     QPoint p =pcst->pixel2bu(org);
-    emit extract_single_wire(prj_file, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y());
+    emit extract_single_wire(prj_file, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y(), cr, cg);
 }

@@ -188,13 +188,17 @@ PrjConst * RenderImage::register_new_window(QObject * pobj)
 	}
 	QThread * render_thread = new QThread;
 	RenderImage * render_image = new RenderImage;
-	
+
 	//Connect bkimg request
 	if (!connect(pobj, SIGNAL(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)),
 		render_image, SLOT(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)))) 
 		qFatal("Connect render_bkimg failed");
-			
-	if (!connect(render_image, SIGNAL(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)),
+
+    if (!connect(pobj, SIGNAL(render_bkimg_blocking(string, unsigned char, QRect, QSize, RenderType,QRect&, QImage &)),
+        render_image, SLOT(render_bkimg_blocking(string, unsigned char, QRect, QSize,RenderType,QRect&,QImage &)), Qt::BlockingQueuedConnection))
+        qFatal("Connect render_bkimg_blocking failed");
+
+    if (!connect(render_image, SIGNAL(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)),
 		pobj, SLOT(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)))) 
 		qFatal("Connect render_bkimg_done failed");
 	
@@ -212,7 +216,7 @@ PrjConst * RenderImage::register_new_window(QObject * pobj)
 		qFatal("connect thread destroy failed");
 
 	qInfo("RenderImage %p and Thread %p are created by View %p", render_image, render_thread, pobj);
-	render_image->moveToThread(render_thread);
+    render_image->moveToThread(render_thread);
 	render_thread->start();
 	return &(render_image->prj_cnst);
 }
@@ -319,7 +323,14 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 			} else { //Not in prev_img cache
 				EncodeImg * pb = new EncodeImg;
 				int ret = bk_img->getRawImgByIdx(pb->buff, layer, x << scale, y << scale, scale, 0);
-				Q_ASSERT(ret == 0 && !pb->buff.empty());
+                //Q_ASSERT(ret == 0 && !pb->buff.empty());
+                if (ret!=0 || pb->buff.empty()) {
+                    qWarning("load image fail, x=%d,y=%d,scale=%d", x<< scale, y<<scale, scale);
+                    QImage black_img(prj_cnst.img_block_w(), prj_cnst.img_block_h(), QImage::Format_RGB32);
+                    black_img.fill(QColor(0, 0, 0));
+                    painter.drawImage(QRect(x0, y0, prj_cnst.img_block_w(), prj_cnst.img_block_h()), black_img);
+                }
+                else
 				if (rt != NO_NEED_RETURN) {
 					pb->x0 = x0;
 					pb->y0 = y0;
@@ -343,7 +354,8 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		QRect render_rect_pixel(QPoint(rpixel.left() / w * w, rpixel.top() / h * h),
 			QPoint(rpixel.right() / w * w + w - 1, rpixel.bottom() / h * h + h - 1));
 		QRect render_rect = prj_cnst.pixel2bu(render_rect_pixel);
-        if (rt == PRINT_SCREEN_NO_RETURN) {
+        switch (rt) {
+        case PRINT_SCREEN_NO_RETURN: {
             QRect source((double)image.width() * (rect.left() - render_rect.left()) / render_rect.width(),
                 (double)image.height()* (rect.top() - render_rect.top()) / render_rect.height(),
                 (double)image.width() * rect.width() / render_rect.width(),
@@ -356,19 +368,52 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
             filename.append(".jpg");
             match_img.save(filename, "JPG");
             return;
-        }
-		if (rt != RETURN_EXACT_MATCH) {
+            }
+        case RETURN_EXACT_MATCH: {
+            QRect source((double)image.width() * (rect.left() - render_rect.left()) / render_rect.width(),
+                (double)image.height()* (rect.top() - render_rect.top()) / render_rect.height(),
+                (double)image.width() * rect.width() / render_rect.width(),
+                (double)image.height()* rect.height() / render_rect.height());
+            QImage match_img = image.copy(source).scaled(screen);
+            emit render_bkimg_done(layer, rect, screen, match_img, true, view);
+            return;
+            }
+        case RETURN_WHEN_PART_READY:
+        case RETURN_UNTIL_ALL_READY: {
 			preimg_map = curimg_map;
-			prev_img = image;			
-			emit render_bkimg_done(layer, render_rect, screen, image, true, view);
-		}
-		else {
-			QRect source((double)image.width() * (rect.left() - render_rect.left()) / render_rect.width(),
-				(double)image.height()* (rect.top() - render_rect.top()) / render_rect.height(),
-				(double)image.width() * rect.width() / render_rect.width(),
-				(double)image.height()* rect.height() / render_rect.height());
-			QImage match_img = image.copy(source).scaled(screen);
-			emit render_bkimg_done(layer, rect, screen, match_img, true, view);
-		}
+            prev_img = image;
+            pre_render_rect = render_rect;
+            if (view != this)
+                emit render_bkimg_done(layer, render_rect, screen, image, true, view);
+            return;
+            }
+        }
 	}
+}
+
+void RenderImage::render_bkimg_blocking(string prj, unsigned char layer, QRect rect,
+     QSize screen, RenderType rt, QRect & render_rect, QImage & img)
+{   
+    QRect request = prj_cnst.pixel2bu(rect);
+    render_bkimg(prj, layer, request, screen, RETURN_UNTIL_ALL_READY, this, false);
+
+    if (rt == RETURN_EXACT_MATCH) {
+        QRect source((double)prev_img.width() * (request.left() - pre_render_rect.left()) / pre_render_rect.width(),
+            (double)prev_img.height()* (request.top() - pre_render_rect.top()) / pre_render_rect.height(),
+            (double)prev_img.width() * request.width() / pre_render_rect.width(),
+            (double)prev_img.height()* request.height() / pre_render_rect.height());
+        render_rect = rect;
+        qDebug("render_bkimg_blocking, reuqest(x=%d,y=%d,w=%d, h=%d), render(x=%d,y=%d,w=%d,h=%d)",
+               request.left(), request.top(), request.width(), request.height(),
+               pre_render_rect.left(), pre_render_rect.top(), pre_render_rect.width(), pre_render_rect.height());
+        img = prev_img.copy(source).scaled(screen);
+    }
+    else {
+        img = prev_img;
+        render_rect = prj_cnst.bu2pixel(pre_render_rect);
+    }
+
+    qDebug("render_bkimg_blocking, render(x=%d,y=%d, w=%d, h=%d), img(w=%d,h=%d)",
+           render_rect.left(), render_rect.top(), render_rect.width(), render_rect.height(), img.width(), img.height());
+    return;
 }

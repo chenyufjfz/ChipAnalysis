@@ -16,7 +16,7 @@ typedef enum {
     RETURN_WHEN_PART_READY,  //Return image immediately, if clear subimage is not ready use blur image instead, and then request may be sent to server and wait all subimage ready, and then return more clear image to caller. So caller may get two or more return. One return is immediate blur image, Another return is clear image after several seconds.
     RETURN_EXACT_MATCH,      //Return image exactly match with request, RETURN_UNTIL_ALL_READY and RETURN_WHEN_PART_READY normally return larger
     PRINT_SCREEN_NO_RETURN,  //Save Image to screen and not return
-    NO_NEED_RETURN			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
+    NO_NEED_RETURN,			 //Caller don't need return, request may be sent to server, so caller can use this to preload, next time when caller call RETURN_UNTIL_ALL_READY or RETURN_WHEN_PART_READY, reply time is less
 } RenderType;
 
 class PrjConst
@@ -76,6 +76,9 @@ public slots:
     void render_bkimg(string prj, const unsigned char layer, const QRect rect,
                       const QSize screen, RenderType rt, const void * view, bool preload_enable);
 
+    void render_bkimg_blocking(string prj, unsigned char layer, QRect rect,
+                      QSize screen, RenderType rt, QRect & render_rect, QImage & img);
+
 protected:
 	static bool inited;
 	static MapID sxy2mapid(unsigned char layer, unsigned char scale, unsigned short x, unsigned short y) {
@@ -109,6 +112,7 @@ protected:
 	};
 	QSharedPointer<BkImgInterface> bk_img;
 	QImage prev_img;
+    QRect pre_render_rect;
 	map <MapID, unsigned int> preimg_map;
 	PrjConst prj_cnst;
 };
