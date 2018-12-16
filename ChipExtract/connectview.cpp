@@ -452,18 +452,23 @@ void ConnectView::keyPressEvent(QKeyEvent *e)
 			else
 				ds = DISPLAY1;
 		break;
-    case Qt::Key_P: {
-        QImage img;
-        QRect ret;
-        emit render_bkimg_blocking(prj_file, bk_layer, view_rect, size(), RETURN_EXACT_MATCH, ret, img);
-        char s[50];
-        sprintf(s, "sc_%d_%d_M", view_rect.top() / pcst->img_block_h(), view_rect.left() / pcst->img_block_w());
-        QString filename(s);
-        filename.append('0' + bk_layer);
-        filename.append(".jpg");
-        img.save(filename, "JPG");
-        return;
-        }
+    case Qt::Key_P:
+        emit render_bkimg(prj_file, bk_layer, pcst->pixel2bu(view_rect), size(), PRINT_SCREEN_NO_RETURN, this, true);
+		break;
+
+	case Qt::Key_T:
+		/*
+		QImage img;
+		QRect ret;
+		emit render_bkimg_blocking(prj_file, bk_layer, QRect(200, 200, 12700, 260), QSize(12700, 260), RETURN_EXACT_MATCH, ret, img);
+		char s[50];
+		sprintf(s, "sc_%d_%d_M", view_rect.top() / pcst->img_block_h(), view_rect.left() / pcst->img_block_w());
+		QString filename(s);
+		filename.append('0' + bk_layer);
+		filename.append(".jpg");
+		img.save(filename, "JPG");
+		return; */
+		break;
     default:
         QWidget::keyPressEvent(e);
         return;
