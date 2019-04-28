@@ -239,3 +239,12 @@ void MainWindow::on_actionNextWarning_triggered()
     warning_idx++;
 
 }
+
+void MainWindow::on_actionClear_Wire_Via_triggered()
+{
+    ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+    Q_ASSERT(connect_view != NULL);
+    warning_objs.clear();
+    warning_idx = 0;
+    connect_view->clear_wire_via();
+}

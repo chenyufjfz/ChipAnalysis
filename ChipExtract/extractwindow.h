@@ -47,6 +47,8 @@ private slots:
 
     void on_actionNextWarning_triggered();
 
+    void on_actionClear_Wire_Via_triggered();
+
 private:
     QLabel *status_label;
     Ui::MainWindow *ui;

@@ -5,7 +5,7 @@
 #include <QFuture>
 #include <QtCore/QSharedPointer>
 
-#define CACHE_SIZE (1<<25)
+#define CACHE_SIZE (1<<29)
 #define PREV_IMG_NUM 5
 BkImgRoMgr bkimg_faty;
 

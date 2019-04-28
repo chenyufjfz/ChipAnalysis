@@ -42,6 +42,7 @@ protected:
 public:
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
     void get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst);
+    void del_objects(unsigned char t1, unsigned long long t2_mask, float prob);
     void link_object(ElementObj * pobj);
     void delink_object(ElementObj * opbj);
     void clear_all();
@@ -66,6 +67,7 @@ public:
     ~ObjectDB();
 	void get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst);
     void get_objects(unsigned char t1, unsigned long long t2_mask, float prob, vector<ElementObj *> & rst);
+    void del_objects(unsigned char t1, unsigned long long t2_mask, float prob);
     void add_object(ElementObj & obj);
     void del_object(ElementObj * p_obj);
     void clear_all();

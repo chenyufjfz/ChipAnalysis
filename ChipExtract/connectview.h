@@ -44,7 +44,7 @@ signals:
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
     void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
     void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt,
-                    int gray_th, int channel, int scale, int x, int y, float cr, float cg);
+                    int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask);
     void mouse_change(QPoint pos, QString msg);
 
 public slots:
@@ -61,10 +61,11 @@ public:
     void cell_extract(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
     void wire_extract(VWSearchRequest & vp, int opt);
     void single_wire_extract(int layer, int wmin, int wmax, int opt,
-                             int gray_th, int channel, QPoint org, float cr = -1, float cg = -1);
+                             int gray_th, int channel, QPoint org, float cr = -1, float cg = -1, int shape_mask=0xff);
     void load_objects(string file_name);
     void set_mark(unsigned char type, unsigned char type2);
     void clear_objs();
+    void clear_wire_via();
 	void set_prj_file(string _prj_file);
     void goto_xy(int x, int y, int layer);
 	string get_prj_file();

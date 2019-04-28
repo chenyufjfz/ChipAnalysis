@@ -57,8 +57,8 @@ void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy
 	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
         qFatal("Connect extract_wire_via_done fail");
-    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float)),
-        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float))))
+    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float,int)),
+        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float,int))))
         qFatal("Connect extract_single_wire fail");
     if (!connect(search_object, SIGNAL(extract_single_wire_done(QSharedPointer<SearchResults>)),
         pobj, SLOT(extract_single_wire_done(QSharedPointer<SearchResults>))))
@@ -368,7 +368,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
 	process_req_queue();
 }
 
-void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg)
+void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask)
 {
     if (prj.length() > 255) {
         qCritical("extract_single_wire prj name too long:%s", prj.c_str());
@@ -406,6 +406,7 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
     int cr_int = 100 * cr;
     int cg_int = 100 * cg;
     rs.req_pkt->params[0].parami[4] = (cg_int & 0xff) << 16 | (cr_int & 0xff) << 8 | scale;
+    rs.req_pkt->params[0].parami[5] = shape_mask;
     rs.req_pkt->params[0].loc[0].opt = 0;
     rs.req_pkt->params[0].loc[0].x0 = x;
     rs.req_pkt->params[0].loc[0].y0 = y;

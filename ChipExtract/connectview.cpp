@@ -520,6 +520,13 @@ void ConnectView::clear_objs()
     update();
 }
 
+void ConnectView::clear_wire_via()
+{
+    odb.del_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, 1.1);
+    odb.del_objects(OBJ_POINT, POINT_VIA_AUTO_EXTRACT_MASK, 1.1);
+    update();
+}
+
 void ConnectView::mouseMoveEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
@@ -541,7 +548,7 @@ void ConnectView::mousePressEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
     if (QGuiApplication::queryKeyboardModifiers() == Qt::ControlModifier) {
-        single_wire_extract(bk_layer, 5, 128, 0, 39, 0, mp, -1, -1);
+        single_wire_extract(bk_layer, 5, 128, 0, 39, 0, mp, -1, -1, 1);
         return;
     }
     if (ms.state == CREATE_NEW_OBJ) {
@@ -672,7 +679,7 @@ void ConnectView::wire_extract(VWSearchRequest & vp, int opt)
 }
 
 void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
-                         int gray_th, int channel, QPoint org, float cr, float cg)
+                         int gray_th, int channel, QPoint org, float cr, float cg, int shape_mask)
 {
     opt =0;
     int s=0;
@@ -682,5 +689,5 @@ void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
         s++;
     }
     QPoint p =pcst->pixel2bu(org);
-    emit extract_single_wire(prj_file, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y(), cr, cg);
+    emit extract_single_wire(prj_file, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y(), cr, cg, shape_mask);
 }

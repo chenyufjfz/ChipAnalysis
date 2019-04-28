@@ -40,6 +40,19 @@ void AreaObjLink::get_objects(unsigned char t1, unsigned long long t2_mask, floa
         areas[i]->get_objects(t1, t2_mask, prob, rst);
 }
 
+void AreaObjLink::del_objects(unsigned char t1, unsigned long long t2_mask, float prob)
+{
+    for (int i = (int) objs.size() - 1; i >=0 ; i--) {
+        if (t1 == objs[i]->type && (t2_mask >> objs[i]->type2) & 1)
+            if (objs[i]->prob <= prob) {
+                delete objs[i];
+                objs.erase(objs.begin() + i);
+            }
+    }
+    for (int i=0; i<(int) areas.size(); i++)
+        areas[i]->del_objects(t1, t2_mask, prob);
+}
+
 void AreaObjLink::link_object(ElementObj * pobj)
 {
 	objs.push_back(pobj);
@@ -161,6 +174,30 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, float p
         break;
     }
 
+}
+
+void ObjectDB::del_objects(unsigned char t1, unsigned long long t2_mask, float prob)
+{
+    QMutexLocker locker(&mutex);
+    switch (t1) {
+    case OBJ_AREA:
+        root_area->del_objects(t1, t2_mask, prob);
+        break;
+
+    case OBJ_LINE:
+        if (t2_mask & (LINE_NORMAL_WIRE0_MASK | LINE_NORMAL_WIRE1_MASK | LINE_NORMAL_WIRE2_MASK
+                       | LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK))
+            root_wire->del_objects(t1, t2_mask, prob);
+        break;
+
+    case OBJ_POINT:
+        if (t2_mask & POINT_CELL_MASK)
+            root_cell->del_objects(t1, t2_mask, prob);
+        if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
+                       POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK))
+            root_via->del_objects(t1, t2_mask, prob);
+        break;
+    }
 }
 
 void ObjectDB::add_object(ElementObj & obj)
