@@ -8,6 +8,8 @@
 #ifdef Q_OS_WIN
 #include <Windows.h>
 #include <Dbghelp.h>
+#define QMSG_FLUSH 1
+
 void print_stack(void)
 {
     unsigned int   i;
