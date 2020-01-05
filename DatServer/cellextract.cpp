@@ -352,7 +352,7 @@ float CellFeature::cmp(int *ig, int lsize, int & dir, float & m_score)
     return (float)min_d / valid_area;
 }
 
-int CellExtract::train(string file_name, const vector<MarkObj> & obj_sets)
+int CellExtract::train(string file_name, vector<MarkObj> & obj_sets)
 {
 	QDir *qdir = new QDir;
 	deldir("./DImg");
@@ -500,7 +500,7 @@ int CellExtract::extract(string file_name, QRect rect, vector<MarkObj> & obj_set
 typedef unsigned long long MapID;
 
 
-int CellExtract::train(vector<ICLayerWrInterface *> & ic_layer, const std::vector<MarkObj> & obj_sets)
+int CellExtract::train(vector<ICLayerWrInterface *> & ic_layer, std::vector<MarkObj> & obj_sets)
 {
     vector<unsigned> bins, th;
     Mat mark, img;

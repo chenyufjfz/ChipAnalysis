@@ -142,7 +142,7 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const Q
 		if (t2_mask & POINT_CELL_MASK)
 			root_cell->get_objects(t1, t2_mask, r, rst);
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
-                       POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK))
+			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
 			root_via->get_objects(t1, t2_mask, r, rst);
 		break;
 	}
@@ -169,7 +169,7 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, float p
         if (t2_mask & POINT_CELL_MASK)
             root_cell->get_objects(t1, t2_mask, prob, rst);
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
-                       POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK))
+			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
             root_via->get_objects(t1, t2_mask, prob, rst);
         break;
     }
@@ -194,7 +194,7 @@ void ObjectDB::del_objects(unsigned char t1, unsigned long long t2_mask, float p
         if (t2_mask & POINT_CELL_MASK)
             root_cell->del_objects(t1, t2_mask, prob);
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
-                       POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK))
+			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
             root_via->del_objects(t1, t2_mask, prob);
         break;
     }
@@ -217,7 +217,7 @@ void ObjectDB::add_object(ElementObj & obj)
 	case OBJ_POINT:
 		if (obj.type2 == POINT_CELL)
 			root_cell->link_object(p_obj);
-        if (obj.type2 >= POINT_NORMAL_VIA0 && obj.type2 <= POINT_VIA_AUTO_EXTRACT)
+		if (obj.type2 >= POINT_NORMAL_VIA0 && obj.type2 <= POINT_NO_VIA)
 			root_via->link_object(p_obj);
 		break;
 
@@ -249,7 +249,7 @@ void ObjectDB::del_object(ElementObj * p_obj)
 	case OBJ_POINT:
 		if (p_obj->type2 == POINT_CELL)
 			root_cell->delink_object(p_obj);
-		if (p_obj->type2 >= POINT_NORMAL_VIA0 && p_obj->type2 <= POINT_NORMAL_VIA3)
+		if (p_obj->type2 >= POINT_NORMAL_VIA0 && p_obj->type2 <= POINT_NO_VIA)
 			root_via->delink_object(p_obj);
 		break;
 		

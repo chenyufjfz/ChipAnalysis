@@ -1,6 +1,7 @@
 #include "communication.hpp"
 #include "serverperclient.h"
 #include <set>
+#include <QScopedPointer>
 extern RakNet::RakPeerInterface *rak_peer;
 BkImgRoMgr bkimg_faty;
 #define DUMP_RESULT     1
@@ -21,6 +22,13 @@ static string get_host_name(string prj_file)
 	else
 		host_name = "127.0.0.1";
 	return host_name;
+}
+
+static void decouple_prj_license(unsigned char * str, string & prj, string & license)
+{
+	int k = str[0];
+	prj = string((char*)&(str[1]), k);
+	license = string((char*)&(str[k + 2]), str[k + 1]);
 }
 
 CellExtractService::CellExtractService(unsigned _token, QObject *parent) : QObject(parent)
@@ -318,7 +326,79 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
                 RELIABLE_ORDERED, SINGLE_WIRE_STREAM, cli_addr, false);
             free(rsp_pkt);
         }
-        break;
+        break;	
+
+	case VWML_TRAIN:
+	case VWML_EXTRACT:
+		if (packet->length != sizeof(ReqSearchPkt)+sizeof(ReqSearchParam)+
+			(req_pkt->req_search_num - 1) * sizeof(Location))
+			qCritical("receive vwml train or extract req length error!");
+		else {
+			ReqSearchParam * pa = &(req_pkt->params[0]);
+			vector<ICLayerWrInterface *> pic;
+			for (int l = 0; l < bk_img->getLayerNum(); l++) {
+				pic.push_back(bk_img->get_layer(l));
+				CV_Assert(pic.back() != NULL);
+			}
+			QScopedPointer<VWExtract> vwe(VWExtract::create_extract(2));
+			vector<MarkObj> objs;
+			if (req_pkt->command == VWML_TRAIN) {
+				qInfo("VWML train p0=%x,p1=%x,p2=%x,p3=%x,p4=%x,p5=%x,p6=%x,p7=%x,p8=%x",
+					pa->parami[0], pa->parami[1], pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5],
+					pa->parami[6], pa->parami[7], pa->parami[8]);
+				vwe->set_train_param(pa->parami[0], pa->parami[1], pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5],
+					pa->parami[6], pa->parami[7], pa->parami[8], pa->paramf);				
+				for (int i = 0; i < req_pkt->req_search_num; i++) {
+					MarkObj obj;					
+					obj.type = pa->parami[0] & 0xff;
+					obj.type2 = pa->loc[i].opt & 0xff;
+					obj.type3 = pa->loc[i].opt >> 8 & 0xff;
+					obj.p0 = QPoint(pa->loc[i].x0, pa->loc[i].y0);
+					obj.p1 = QPoint(pa->loc[i].x1, pa->loc[i].y1);
+					objs.push_back(obj);
+					qInfo("VWML train l=%d,(x=%d,y=%d),t=%d,t2=%d",(int) obj.type3, obj.p0.x(), 
+						obj.p0.y(), (int)obj.type, (int)obj.type2);
+				}
+				vwe->train(pic, objs);
+			} 
+			else {
+				qInfo("VWML extract p0=%x,p1=%x,p2=%x,p3=%x,p4=%x,p5=%x,p6=%x,p7=%x,p8=%x",
+					pa->parami[0], pa->parami[1], pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5],
+					pa->parami[6], pa->parami[7], pa->parami[8]);
+				vwe->set_extract_param(pa->parami[0], pa->parami[1], pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5],
+					pa->parami[6], pa->parami[7], pa->parami[8], pa->paramf);
+				vector<SearchArea> areas;
+				for (int j = 0; j < req_pkt->req_search_num; j++) {
+					qInfo("VWML extract (%d,%d)_(%d,%d)", pa->loc[j].x0, pa->loc[j].y0,
+						pa->loc[j].x1, pa->loc[j].y1);
+					areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
+						pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
+				}
+				vwe->extract(pic, areas, objs);
+			}
+			
+			//send response
+			unsigned rsp_len = sizeof(RspSearchPkt)+(unsigned)objs.size() * sizeof(Location);
+			RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
+			rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
+			rsp_pkt->command = req_pkt->command;
+			rsp_pkt->token = req_pkt->token;
+			rsp_pkt->rsp_search_num = (unsigned)objs.size();
+			Location * ploc = &(rsp_pkt->result[0]);
+			for (unsigned j = 0; j < objs.size(); j++) {
+				ploc[j].x0 = objs[j].p0.x();
+				ploc[j].y0 = objs[j].p0.y();
+				ploc[j].x1 = objs[j].p1.x();
+				ploc[j].y1 = objs[j].p1.y();
+				unsigned short t = objs[j].type;
+				ploc[j].opt = t << 8 | objs[j].type3;
+				ploc[j].prob = objs[j].prob;
+			}
+			rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
+				RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
+			free(rsp_pkt);
+		}
+		break;
     }
     
 }
@@ -378,9 +458,11 @@ void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
 	switch (req_pkt->typeId) {
     case ID_REQUIRE_OBJ_SEARCH:
 		if (req_pkt->command != SHUT_DOWN) {
-            string prj((char*) &req_pkt->prj_file[1], (unsigned) req_pkt->prj_file[0]);
+			string prj;
+			string license;
+			decouple_prj_license(req_pkt->prj_file, prj, license);
             if (iter->second.bk_img.isNull() || iter->second.bk_img->get_prj_name() != prj) {
-				iter->second.bk_img = bkimg_faty.open(prj, 0);
+				iter->second.bk_img = bkimg_faty.open(prj, license, 0);
                 if (iter->second.bk_img.isNull())
                     return;
             }
@@ -393,6 +475,8 @@ void ServerPerClient::handle_client_req(QSharedPointer<RakNet::Packet> packet)
             break;
         case VW_EXTRACT:
         case SINGLE_WIRE_EXTRACT:
+		case VWML_TRAIN:
+		case VWML_EXTRACT:
             qInfo("Receive request vwextract %s", packet->data[1]==VW_EXTRACT ? "area" : "single");
             emit vw_extract_req((void*)&cli_addr, iter->second.bk_img, packet);
             break;

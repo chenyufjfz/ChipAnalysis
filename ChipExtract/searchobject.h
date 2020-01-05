@@ -12,6 +12,7 @@
 #include "markobj.h"
 #include "RakPeerInterface.h"
 #include "extractparam.h"
+#include <QPolygon>
 using namespace std;
 
 struct SearchResults {
@@ -71,6 +72,9 @@ signals:
     void extract_cell_done(QSharedPointer<SearchResults>);
     void extract_wire_via_done(QSharedPointer<SearchResults>);
     void extract_single_wire_done(QSharedPointer<SearchResults>);
+	void train_via_ml_done(QSharedPointer<SearchResults>);
+	void del_via_ml_done();
+	void extract_ml_done(QSharedPointer<SearchResults>);
 	void server_found();
 	void server_lost();
 
@@ -81,12 +85,15 @@ public slots:
 	/*
 	Input: prj, if prj name change, SearchObject may reselect server.
 	*/
-	void train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+	void train_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
-	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+	void extract_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
-    void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
-    void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask);
+	void extract_wire_via(string prj, string license, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
+	void extract_single_wire(string prj, string license, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask);
+	void train_via_ml(string prj, string license, int layer, int label, int dmin, int dmax, int x, int y, int param2, int param3, int param4, int param5, int param6);
+	void del_via_ml(string prj, string license, int layer, int d, int x, int y);
+	void extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int param1, int param2, int param3, int param4, int param5, int opt);
 
 protected:
 	static bool inited;
@@ -111,6 +118,7 @@ protected:
 	string prefer_server;
 	vector<string> cad_server;
 	unsigned cad_idx;
+	int current_ml_train;
 	unsigned token; //toke=0 means not connect to server, after connect to server, token is given a non_zero value
 };
 

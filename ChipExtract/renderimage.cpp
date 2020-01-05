@@ -190,12 +190,12 @@ PrjConst * RenderImage::register_new_window(QObject * pobj)
 	RenderImage * render_image = new RenderImage;
 
 	//Connect bkimg request
-	if (!connect(pobj, SIGNAL(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)),
-		render_image, SLOT(render_bkimg(string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)))) 
+    if (!connect(pobj, SIGNAL(render_bkimg(string, string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool)),
+        render_image, SLOT(render_bkimg(string, string, const unsigned char, const QRect, const QSize, RenderType, const void *, bool))))
 		qFatal("Connect render_bkimg failed");
 
-    if (!connect(pobj, SIGNAL(render_bkimg_blocking(string, unsigned char, QRect, QSize, RenderType,QRect&, QImage &)),
-        render_image, SLOT(render_bkimg_blocking(string, unsigned char, QRect, QSize,RenderType,QRect&,QImage &)), Qt::BlockingQueuedConnection))
+    if (!connect(pobj, SIGNAL(render_bkimg_blocking(string, string, unsigned char, QRect, QSize, RenderType,QRect&, QImage &)),
+        render_image, SLOT(render_bkimg_blocking(string, string, unsigned char, QRect, QSize,RenderType,QRect&,QImage &)), Qt::BlockingQueuedConnection))
         qFatal("Connect render_bkimg_blocking failed");
 
     if (!connect(render_image, SIGNAL(render_bkimg_done(const unsigned char, const QRect, const QSize, QImage, bool, const void *)),
@@ -234,12 +234,12 @@ RenderImage::~RenderImage()
  * rect's unit is bu
  * screen's unit is pixel
  */
-void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRect rect,
+void RenderImage::render_bkimg(string prj, string license, const unsigned char layer, const QRect rect,
 	const QSize screen, RenderType rt, const void * view, bool preload_enable)
 {
 	//check if prj is new, if yes, open prj
 	if (bk_img.isNull()) {
-		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
+        bk_img = bkimg_faty.open(prj, license, CACHE_SIZE);
         if (bk_img.isNull()) {
             qCritical("open prj %s fail!", prj.c_str());
 			return;
@@ -247,12 +247,16 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
 		bk_img->getBlockNum(bx, by);
+        if (width == 0 || bx == 0 || by == 0)  {
+            qCritical("get prj %s width and block fail!", prj.c_str());
+            return;
+        }
 		prj_cnst.set(width, width, bx, by, bk_img->getLayerNum(), bk_img->getMaxScale());
 	}
 	if (bk_img->get_prj_name() != prj) {
 		prj_cnst.reset();
 		bk_img->adjust_cache_size(-CACHE_SIZE);
-		bk_img = bkimg_faty.open(prj, CACHE_SIZE);
+        bk_img = bkimg_faty.open(prj, license, CACHE_SIZE);
         if (bk_img.isNull()) {
             qCritical("reset and open prj %s fail!", prj.c_str());
 			return;
@@ -261,6 +265,10 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 		int width, bx, by;
 		width = bk_img->getBlockWidth();
 		bk_img->getBlockNum(bx, by);
+        if (width == 0 || bx == 0 || by == 0)  {
+            qCritical("get prj %s width and block fail!", prj.c_str());
+            return;
+        }
 		prj_cnst.set(width, width, bx, by, bk_img->getLayerNum(), bk_img->getMaxScale());
 	}
 
@@ -391,11 +399,11 @@ void RenderImage::render_bkimg(string prj, const unsigned char layer, const QRec
 	}
 }
 
-void RenderImage::render_bkimg_blocking(string prj, unsigned char layer, QRect rect,
+void RenderImage::render_bkimg_blocking(string prj, string license, unsigned char layer, QRect rect,
      QSize screen, RenderType rt, QRect & render_rect, QImage & img)
 {   
     QRect request = prj_cnst.pixel2bu(rect);
-    render_bkimg(prj, layer, request, screen, RETURN_UNTIL_ALL_READY, this, false);
+    render_bkimg(prj, license, layer, request, screen, RETURN_UNTIL_ALL_READY, this, false);
 
     if (rt == RETURN_EXACT_MATCH) {
         QRect source((double)prev_img.width() * (request.left() - pre_render_rect.left()) / pre_render_rect.width(),

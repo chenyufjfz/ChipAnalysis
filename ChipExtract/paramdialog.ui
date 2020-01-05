@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>395</width>
-    <height>354</height>
+    <width>434</width>
+    <height>391</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,16 +18,16 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>391</width>
-     <height>351</height>
+     <width>431</width>
+     <height>391</height>
     </rect>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>2</number>
    </property>
    <widget class="QWidget" name="Wire">
     <attribute name="title">
-     <string>Tab 1</string>
+     <string>ViaWireManual</string>
     </attribute>
     <widget class="QPushButton" name="pushButton">
      <property name="geometry">
@@ -140,7 +140,7 @@
    </widget>
    <widget class="QWidget" name="Cell">
     <attribute name="title">
-     <string>Tab 2</string>
+     <string>cell</string>
     </attribute>
     <widget class="QWidget" name="layoutWidget">
      <property name="geometry">
@@ -195,6 +195,258 @@
      </property>
      <property name="text">
       <string>Search Cell</string>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QWidget" name="tab">
+    <attribute name="title">
+     <string>ViaWireML</string>
+    </attribute>
+    <widget class="QLabel" name="label_4">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>10</y>
+       <width>55</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Via</string>
+     </property>
+    </widget>
+    <widget class="QWidget" name="gridLayoutWidget">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>10</y>
+       <width>323</width>
+       <height>140</height>
+      </rect>
+     </property>
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="4">
+       <widget class="QLabel" name="label_18">
+        <property name="text">
+         <string>  D10</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="QLineEdit" name="dia7"/>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLineEdit" name="dia6"/>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLineEdit" name="dia5"/>
+      </item>
+      <item row="3" column="3">
+       <widget class="QLineEdit" name="dia8"/>
+      </item>
+      <item row="4" column="3">
+       <widget class="QLineEdit" name="dia9"/>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="dia1"/>
+      </item>
+      <item row="4" column="2">
+       <widget class="QLabel" name="label_17">
+        <property name="text">
+         <string>   D9</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="dia2"/>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLineEdit" name="dia3"/>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="label_12">
+        <property name="text">
+         <string>   D5</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="QLabel" name="label_14">
+        <property name="text">
+         <string>   D7</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>D1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>D2</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_11">
+        <property name="text">
+         <string>D3</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="label_13">
+        <property name="text">
+         <string>   D6</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="2">
+       <widget class="QLabel" name="label_15">
+        <property name="text">
+         <string>   D8</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLineEdit" name="dia4"/>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_16">
+        <property name="text">
+         <string>D4</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="dia0"/>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>D0</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QLineEdit" name="dia10"/>
+      </item>
+      <item row="1" column="4">
+       <widget class="QLabel" name="label_19">
+        <property name="text">
+         <string>  D11</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QLineEdit" name="dia11"/>
+      </item>
+      <item row="2" column="5">
+       <widget class="QLineEdit" name="dia12"/>
+      </item>
+      <item row="3" column="5">
+       <widget class="QLineEdit" name="dia13"/>
+      </item>
+      <item row="4" column="5">
+       <widget class="QLineEdit" name="dia14"/>
+      </item>
+      <item row="2" column="4">
+       <widget class="QLabel" name="label_20">
+        <property name="text">
+         <string>  D12</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="4">
+       <widget class="QLabel" name="label_21">
+        <property name="text">
+         <string>  D13</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="4">
+       <widget class="QLabel" name="label_22">
+        <property name="text">
+         <string>  D14</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+    <widget class="QPushButton" name="pushButton_4">
+     <property name="geometry">
+      <rect>
+       <x>300</x>
+       <y>320</y>
+       <width>93</width>
+       <height>28</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>MLSearch</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_23">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>170</y>
+       <width>55</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Layer min</string>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="layer_min">
+     <property name="geometry">
+      <rect>
+       <x>110</x>
+       <y>170</y>
+       <width>51</width>
+       <height>22</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="layer_max">
+     <property name="geometry">
+      <rect>
+       <x>280</x>
+       <y>170</y>
+       <width>51</width>
+       <height>22</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_24">
+     <property name="geometry">
+      <rect>
+       <x>200</x>
+       <y>170</y>
+       <width>61</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Layer max</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="ml_parallel">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>290</y>
+       <width>131</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Multi CPU search</string>
      </property>
     </widget>
    </widget>

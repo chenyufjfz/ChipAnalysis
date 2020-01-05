@@ -8,7 +8,8 @@
 #include <map>
 #include "RakPeerInterface.h"
 #include "cellextract.h"
-#include "vwextract.h"
+#include "vwextract_public.h"
+
 using namespace std;
 
 class CellExtractService : public QObject {

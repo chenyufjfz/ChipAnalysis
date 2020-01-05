@@ -73,10 +73,10 @@ signals:
                            QImage image, bool finish, const void * view);
 
 public slots:
-    void render_bkimg(string prj, const unsigned char layer, const QRect rect,
+    void render_bkimg(string prj, string license, const unsigned char layer, const QRect rect,
                       const QSize screen, RenderType rt, const void * view, bool preload_enable);
 
-    void render_bkimg_blocking(string prj, unsigned char layer, QRect rect,
+    void render_bkimg_blocking(string prj, string license, unsigned char layer, QRect rect,
                       QSize screen, RenderType rt, QRect & render_rect, QImage & img);
 
 protected:

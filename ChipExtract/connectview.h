@@ -8,6 +8,8 @@
 #include "searchobject.h"
 #include "objectdb.h"
 
+#define SEARCH_PARALLEL 1
+
 enum {
     CREATE_NEW_OBJ,
     CHOOSE_ANO_POINT,
@@ -34,17 +36,20 @@ public:
     explicit ConnectView(const char * prj_name = 0, QWidget *parent = 0);
 
 signals:
-	void render_bkimg(string prj, const unsigned char layer, const QRect rect,
+    void render_bkimg(string prj, string _license, const unsigned char layer, const QRect rect,
                       const QSize screen, RenderType rt, const void * view, bool preload_enable);
-    void render_bkimg_blocking(string prj, unsigned char layer, QRect rect_pixel,
+    void render_bkimg_blocking(string prj, string _license,unsigned char layer, QRect rect_pixel,
                       QSize screen, RenderType rt, QRect & render_pixel, QImage & img);
-    void train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+    void train_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     unsigned char dir, const QRect rect, float param1, float param2, float param3);
-	void extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+	void extract_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
                     QSharedPointer<SearchRects> prect, float param1, float param2, float param3);
-    void extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
-    void extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt,
+	void extract_wire_via(string prj, string license, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option);
+	void extract_single_wire(string prj, string license, int layer, int wmin, int wmax, int ihigh, int opt,
                     int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask);
+	void train_via_ml(string prj, string license, int layer, int label, int dmin, int dmax, int x, int y, int param2, int param3, int param4, int param5, int param6);
+	void del_via_ml(string prj, string license, int layer, int d, int x, int y);
+	void extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int param1, int param2, int param3, int param4, int param5, int opt);
     void mouse_change(QPoint pos, QString msg);
 
 public slots:
@@ -55,6 +60,9 @@ public slots:
     void extract_cell_done(QSharedPointer<SearchResults> prst);
     void extract_wire_via_done(QSharedPointer<SearchResults> prst);
     void extract_single_wire_done(QSharedPointer<SearchResults> prst);
+	void train_via_ml_done(QSharedPointer<SearchResults>);
+	void del_via_ml_done();
+	void extract_ml_done(QSharedPointer<SearchResults>);
 
 public:
     void cell_train(int i1, int i2, int i3, int i4, float f1, float f2, float f3);
@@ -62,13 +70,20 @@ public:
     void wire_extract(VWSearchRequest & vp, int opt);
     void single_wire_extract(int layer, int wmin, int wmax, int opt,
                              int gray_th, int channel, QPoint org, float cr = -1, float cg = -1, int shape_mask=0xff);
+	void ml_via_train(int layer, int dmin, int dmax, int label, QPoint v);
+	void ml_via_del(int layer, int d, QPoint v);
+	void vwml_extract(int layer_min, int layer_max, int opt);
     void load_objects(string file_name);
     void set_mark(unsigned char type, unsigned char type2);
+    void set_license(string _license);
     void clear_objs();
     void clear_wire_via();
 	void set_prj_file(string _prj_file);
     void goto_xy(int x, int y, int layer);
 	string get_prj_file();
+	int get_current_layer();
+	void get_dia(vector<int> & dia_);
+	void set_dia(const vector<int> & dia_);
 
 protected:
     void draw_obj(ElementObj & obj, QPainter &painter);
@@ -81,6 +96,7 @@ protected:
 
 protected:
 	DisplayState ds;
+	vector<int> dia;
     bool hide_element;
     MarkState ms;
 	QImage render_img, render_img_2;
@@ -89,7 +105,7 @@ protected:
     double scale, scale_2;
     unsigned char bk_layer, bk_layer_2, render_bk_layer;
 	PrjConst *pcst;
-	string prj_file;
+    string prj_file, license;
 };
 
 #endif // CONNECTVIEW_H

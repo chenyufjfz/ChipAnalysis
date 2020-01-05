@@ -21,6 +21,11 @@ MainWindow::MainWindow(QWidget *parent) :
 	monkey_test_id = 0;
     warning_idx = 0;
     setCentralWidget(&views);
+	QActionGroup* mark_action_group = new QActionGroup(this);
+	mark_action_group->addAction(ui->actionMark_Cell);
+	mark_action_group->addAction(ui->actionMark_Extract_Area);
+	mark_action_group->addAction(ui->actionMark_NoVia);
+	mark_action_group->addAction(ui->actionMark_Via);
 }
 
 MainWindow::~MainWindow()
@@ -30,31 +35,45 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_actionTrain_triggered()
 {
-    ParamDialog param_dlg;
+	vector<int> dia;
+	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+	Q_ASSERT(connect_view != NULL);
+	connect_view->get_dia(dia);
+    ParamDialog param_dlg(dia, -1, -1);
     if (param_dlg.exec() == QDialog::Accepted) {
-		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
-		Q_ASSERT(connect_view != NULL);
-        if (param_dlg.choose_cell)
+        if (param_dlg.choose == 1)
             connect_view->cell_train(0, 0, 0, 0, param_dlg.cell_param1,
                 param_dlg.cell_param2, param_dlg.cell_param3);
+		if (param_dlg.choose == 2) {
+			for (int i = 0; i < (int)min(sizeof(param_dlg.dia) / sizeof(int), dia.size()); i++)
+				dia[i] = param_dlg.dia[i];
+			connect_view->set_dia(dia);
+		}
     }
 }
 
 void MainWindow::on_actionExtract_triggered()
 {
-    ParamDialog param_dlg;
-    if (param_dlg.exec() == QDialog::Accepted) {
-		ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
-		Q_ASSERT(connect_view != NULL);
-        if (param_dlg.choose_cell)
+	vector<int> dia;
+	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+	Q_ASSERT(connect_view != NULL);
+	int layer_min = connect_view->get_current_layer();
+	int layer_max = connect_view->get_current_layer();
+    ParamDialog param_dlg(dia, layer_min, layer_max);
+    if (param_dlg.exec() == QDialog::Accepted) {		
+        if (param_dlg.choose == 1)
             connect_view->cell_extract(0, 0, 0, 0, param_dlg.cell_param1,
-                param_dlg.cell_param2, param_dlg.cell_param3);
-		else {
+                param_dlg.cell_param2, param_dlg.cell_param3); 
+		if (param_dlg.choose == 0) {
 #if EXTRACT_PARAM == 1
 			VWSearchRequest vwsr;
 			param_dlg.ep.get_param(param_dlg.action_name, vwsr.lpa);
-            connect_view->wire_extract(vwsr, param_dlg.parallel ? 1 : 0);
+			connect_view->wire_extract(vwsr, param_dlg.parallel ? SEARCH_PARALLEL : 0);
 #endif
+		}
+		if (param_dlg.choose == 2) {
+			connect_view->set_dia(dia);			
+			connect_view->vwml_extract(param_dlg.layer_min, param_dlg.layer_max, param_dlg.parallel ? SEARCH_PARALLEL : 0);
 		}
     }
 
@@ -182,7 +201,7 @@ void MainWindow::on_actionMonkeyTest_triggered()
 void MainWindow::on_actionNew_View_triggered()
 {
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"),
-                                                    "./",
+                                                    "C:/chenyu/data/",
                                                     tr("Project (*.prj)"));
 
     ConnectView * connect_view = new ConnectView(fileName.toStdString().c_str(), this);
@@ -247,4 +266,18 @@ void MainWindow::on_actionClear_Wire_Via_triggered()
     warning_objs.clear();
     warning_idx = 0;
     connect_view->clear_wire_via();
+}
+
+void MainWindow::on_actionMark_Via_triggered()
+{
+    ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+    Q_ASSERT(connect_view != NULL);
+    connect_view->set_mark(OBJ_POINT, POINT_NORMAL_VIA0);
+}
+
+void MainWindow::on_actionMark_NoVia_triggered()
+{
+    ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+    Q_ASSERT(connect_view != NULL);
+    connect_view->set_mark(OBJ_POINT, POINT_NO_VIA);
 }

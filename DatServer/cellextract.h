@@ -51,13 +51,13 @@ public:
 		}		
         return 0;
 	}
-	int train(string file_name, const vector<MarkObj> & obj_sets);
+	int train(string file_name, vector<MarkObj> & obj_sets);
 	int extract(string file_name, QRect rect, vector<MarkObj> & obj_sets);
     int set_extract_param(int, int, int, int, int, int, int param1_, int param2_, int param3_, float)
     {
 		return set_train_param(0, 0, 0, 0, 0, 0, param1_, param2_, param3_, 0);
     }
-    int train(vector<ICLayerWrInterface *> & ic_layer, const vector<MarkObj> & obj_sets);
+    int train(vector<ICLayerWrInterface *> & ic_layer, vector<MarkObj> & obj_sets);
     int extract(vector<ICLayerWrInterface *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets);
 	void get_feature(int, int, int, vector<float> &, std::vector<int> &) {}
 	Mat get_mark(int) {

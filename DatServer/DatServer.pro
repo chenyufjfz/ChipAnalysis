@@ -42,7 +42,7 @@ HEADERS  += serverwindow.h \
     cellextract.h \
     objextract.h \
     markobj.h \
-    vwextract.h \
+    vwextract_public.h \
     iclayer.h
 
 FORMS    += serverwindow.ui

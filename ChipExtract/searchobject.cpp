@@ -7,6 +7,8 @@ extern ClientThread ct;
 bool SearchObject::inited = false;
 QAtomicInteger<unsigned> SearchObject::global_token(1);
 
+#define PRJ_NAME_LIMIT 255
+
 static void search_result_del(SearchResults * sr)
 {
 	qInfo("Delete SearchResults");
@@ -30,6 +32,15 @@ static string get_host_name(string prj_file)
 	return host_name;
 }
 
+static void couple_prj_license(unsigned char * str, string prj, string license)
+{
+	str[0] = (unsigned char)prj.length();
+	int k = str[0];
+	memcpy((char*)&(str[1]), prj.data(), k);
+	str[k + 1] = (unsigned char)license.length();
+	memcpy((char*)&(str[k + 2]), license.data(), str[k + 1]);
+}
+
 void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy)
 {
 	if (!inited) {
@@ -42,27 +53,45 @@ void SearchObject::register_new_window(QObject * pobj, ChooseServerPolicy policy
 	}
 	SearchObject * search_object = new SearchObject(pobj);
 
-	if (!connect(pobj, SIGNAL(train_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float)),
-		search_object, SLOT(train_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float))))
+	if (!connect(pobj, SIGNAL(train_cell(string, string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float)),
+		search_object, SLOT(train_cell(string, string, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, QRect, float, float, float))))
 		qFatal("Connect train_cell fail");
-	if (!connect(pobj, SIGNAL(extract_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float)),
-		search_object, SLOT(extract_cell(string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float))))
+	if (!connect(pobj, SIGNAL(extract_cell(string, string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float)),
+		search_object, SLOT(extract_cell(string, string, unsigned char, unsigned char, unsigned char, unsigned char, QSharedPointer<SearchRects>, float, float, float))))
 		qFatal("Connect extract_cell fail");
 	if (!connect(search_object, SIGNAL(extract_cell_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_cell_done(QSharedPointer<SearchResults>))))
 		qFatal("Connect extract_cell_done fail");
-    if (!connect(pobj, SIGNAL(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect, int)),
-        search_object, SLOT(extract_wire_via(string, QSharedPointer<VWSearchRequest>, QRect, int))))
+    if (!connect(pobj, SIGNAL(extract_wire_via(string, string, QSharedPointer<VWSearchRequest>, QRect, int)),
+        search_object, SLOT(extract_wire_via(string, string, QSharedPointer<VWSearchRequest>, QRect, int))))
 		qFatal("Connect extract_wire_via fail");
 	if (!connect(search_object, SIGNAL(extract_wire_via_done(QSharedPointer<SearchResults>)),
 		pobj, SLOT(extract_wire_via_done(QSharedPointer<SearchResults>))))
         qFatal("Connect extract_wire_via_done fail");
-    if (!connect(pobj, SIGNAL(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float,int)),
-        search_object, SLOT(extract_single_wire(string,int,int,int,int,int,int,int,int,int,int,float,float,int))))
+    if (!connect(pobj, SIGNAL(extract_single_wire(string,string,int,int,int,int,int,int,int,int,int,int,float,float,int)),
+        search_object, SLOT(extract_single_wire(string,string,int,int,int,int,int,int,int,int,int,int,float,float,int))))
         qFatal("Connect extract_single_wire fail");
+	if (!connect(pobj, SIGNAL(train_via_ml(string, string, int, int, int, int, int, int, int, int, int, int, int)),
+		search_object, SLOT(train_via_ml(string, string, int, int, int, int, int, int, int, int, int, int, int))))
+		qFatal("Connect train_via_ml fail");
+	if (!connect(pobj, SIGNAL(del_via_ml(string, string, int, int, int, int)),
+		search_object, SLOT(del_via_ml(string, string, int, int, int, int))))
+		qFatal("Connect del_via_ml fail");
+	if (!connect(pobj, SIGNAL(extract_ml(string, string, int, int, QPolygon, int, int, int, int, int, int)),
+		search_object, SLOT(extract_ml(string, string, int, int, QPolygon, int, int, int, int, int, int))))
+		qFatal("Connect extract_ml fail");
     if (!connect(search_object, SIGNAL(extract_single_wire_done(QSharedPointer<SearchResults>)),
         pobj, SLOT(extract_single_wire_done(QSharedPointer<SearchResults>))))
         qFatal("Connect extract_single_wire_done fail");
+	if (!connect(search_object, SIGNAL(train_via_ml_done(QSharedPointer<SearchResults>)),
+		pobj, SLOT(train_via_ml_done(QSharedPointer<SearchResults>))))
+		qFatal("Connect train_via_ml_done fail");
+	if (!connect(search_object, SIGNAL(del_via_ml_done()),
+		pobj, SLOT(del_via_ml_done())))
+		qFatal("Connect del_via_ml_done fail");
+	if (!connect(search_object, SIGNAL(extract_ml_done(QSharedPointer<SearchResults>)),
+		pobj, SLOT(extract_ml_done(QSharedPointer<SearchResults>))))
+		qFatal("Connect extract_ml_done fail");
 
 	if (!connect(&ct, SIGNAL(search_packet_arrive(QSharedPointer<RakNet::Packet>)), search_object, SLOT(search_packet_arrive(QSharedPointer<RakNet::Packet>))))
 		qFatal("Connect search_packet_arrive fail");
@@ -233,10 +262,10 @@ void SearchObject::process_req_queue()
 	}
 }
 
-void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+void SearchObject::train_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
      unsigned char dir, const QRect rect, float param1, float param2, float param3)
 {
-	if (prj.length() > 255) {
+	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
@@ -250,8 +279,7 @@ void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, un
 	ReqSearch rs;
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
-    rs.req_pkt->prj_file[0] = (unsigned char) prj.length();
-    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = CELL_TRAIN;
 	rs.req_pkt->req_search_num = 1;
@@ -272,10 +300,10 @@ void SearchObject::train_cell(string prj, unsigned char l0, unsigned char l1, un
 	process_req_queue();
 }
 
-void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
+void SearchObject::extract_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
      QSharedPointer<SearchRects> prect, float param1, float param2, float param3)
 {
-	if (prj.length() > 255) {
+	if (prj.length() + license.length()  > PRJ_NAME_LIMIT) {
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
@@ -288,8 +316,7 @@ void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, 
 	ReqSearch rs;
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) + (prect->rects.size() -1) * (unsigned) sizeof(Location);
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
-	rs.req_pkt->prj_file[0] = prj.length();
-    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = CELL_EXTRACT;
 	rs.req_pkt->req_search_num = prect->rects.size();
@@ -315,9 +342,9 @@ void SearchObject::extract_cell(string prj, unsigned char l0, unsigned char l1, 
 	process_req_queue();
 }
 
-void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option)
+void SearchObject::extract_wire_via(string prj, string license, QSharedPointer<VWSearchRequest> preq, const QRect rect, int option)
 {
-	if (prj.length() > 255) {
+	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
@@ -330,8 +357,7 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
 	ReqSearch rs;
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * preq->lpa.size();
 	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
-	rs.req_pkt->prj_file[0] = prj.length();
-    strcpy((char*) &(rs.req_pkt->prj_file[1]), prj.c_str());
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
 	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
 	rs.req_pkt->command = VW_EXTRACT;
 	rs.req_pkt->req_search_num = preq->lpa.size();
@@ -368,9 +394,9 @@ void SearchObject::extract_wire_via(string prj, QSharedPointer<VWSearchRequest> 
 	process_req_queue();
 }
 
-void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask)
+void SearchObject::extract_single_wire(string prj, string license, int layer, int wmin, int wmax, int ihigh, int opt, int gray_th, int channel, int scale, int x, int y, float cr, float cg, int shape_mask)
 {
-    if (prj.length() > 255) {
+	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
         qCritical("extract_single_wire prj name too long:%s", prj.c_str());
         return;
     }
@@ -394,8 +420,7 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
     ReqSearch rs;
     rs.req_len = sizeof(ReqSearchPkt) + sizeof(ReqSearchParam);
     rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
-    rs.req_pkt->prj_file[0] = prj.length();
-    strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
     rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
     rs.req_pkt->command = SINGLE_WIRE_EXTRACT;
     rs.req_pkt->req_search_num = 1;
@@ -414,6 +439,113 @@ void SearchObject::extract_single_wire(string prj, int layer, int wmin, int wmax
     rs.req_pkt->params[0].loc[0].y1 = y;
     req_queue.push_back(rs);
     process_req_queue();
+}
+
+void SearchObject::train_via_ml(string prj, string license, int layer, int label, int dmin, int dmax, int x, int y, int param2, int param3, int param4, int param5, int param6)
+{
+	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (dmin > dmax || dmax > 255) {
+		qCritical("invalid dmin %d or dmax %d", dmin, dmax);
+		return;
+	}
+	if (get_host_name(prj) != prj_host || token == 0) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
+	ReqSearch rs;
+	rs.req_len = sizeof(ReqSearchPkt)+sizeof(ReqSearchParam);
+	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = VWML_TRAIN;
+	rs.req_pkt->req_search_num = 1;
+	rs.req_pkt->params[0].parami[0] = OBJ_POINT;
+	rs.req_pkt->params[0].parami[1] = dmax << 8 | dmin;
+	rs.req_pkt->params[0].parami[2] = param2;
+	rs.req_pkt->params[0].parami[3] = param3;
+	rs.req_pkt->params[0].parami[4] = param4;
+	rs.req_pkt->params[0].parami[5] = param5;
+	rs.req_pkt->params[0].parami[6] = param6;
+	rs.req_pkt->params[0].loc[0].x0 = x;
+	rs.req_pkt->params[0].loc[0].y0 = y;
+	current_ml_train = (label & 1) ? POINT_NORMAL_VIA0 : POINT_NO_VIA;
+	rs.req_pkt->params[0].loc[0].opt = layer << 8 | current_ml_train;
+	qInfo("train_via_ml %s l=%d,(%d,%d), dmin=%d dmax=%d label=%d p2=%x p3=%x p4=%x p5=%x p6=%x", prj.c_str(), layer,
+		x, y, dmin, dmax, label, param2, param3, param4, param5, param6);
+	req_queue.push_back(rs);
+	process_req_queue();
+}
+
+void SearchObject::del_via_ml(string prj, string license, int layer, int d, int x, int y)
+{
+	if (prj.length() + license.length()  > PRJ_NAME_LIMIT) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (get_host_name(prj) != prj_host || token == 0) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
+	ReqSearch rs;
+	rs.req_len = sizeof(ReqSearchPkt)+sizeof(ReqSearchParam);
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
+	strcpy((char*)&(rs.req_pkt->prj_file[1]), prj.c_str());
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = VWML_TRAIN;
+	rs.req_pkt->req_search_num = 1;
+	rs.req_pkt->params[0].parami[0] = OBJ_POINT;
+	rs.req_pkt->params[0].parami[1] = 1 << 16;
+	rs.req_pkt->params[0].loc[0].x0 = x;
+	rs.req_pkt->params[0].loc[0].y0 = y;
+	rs.req_pkt->params[0].loc[0].opt = layer << 8 | POINT_NORMAL_VIA0;
+	qInfo("del_via_ml %s (%d,%d)", prj.c_str(), x, y);
+	req_queue.push_back(rs);
+	process_req_queue();
+}
+
+void SearchObject::extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int param1, int param2, int param3, int param4, int param5, int opt)
+{
+	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
+		qCritical("prj name too long:%s", prj.c_str());
+		return;
+	}
+	if (get_host_name(prj) != prj_host || token == 0) {
+		prj_host = get_host_name(prj);
+		req_queue.clear();
+		if (try_server(true) < 0)
+			return;
+	}
+	QRect r = area.boundingRect();
+	ReqSearch rs;
+	rs.req_len = sizeof(ReqSearchPkt)+sizeof(ReqSearchParam);
+	rs.req_pkt = QSharedPointer<ReqSearchPkt>((ReqSearchPkt *)malloc(rs.req_len), search_request_del);
+	couple_prj_license(rs.req_pkt->prj_file, prj, license);
+	rs.req_pkt->typeId = ID_REQUIRE_OBJ_SEARCH;
+	rs.req_pkt->command = VWML_EXTRACT;
+	rs.req_pkt->req_search_num = 1;
+	rs.req_pkt->params[0].parami[0] = layer_max << 8 | layer_min;
+	rs.req_pkt->params[0].parami[1] = param1;
+	rs.req_pkt->params[0].parami[2] = param2;
+	rs.req_pkt->params[0].parami[3] = param3;
+	rs.req_pkt->params[0].parami[4] = param4;
+	rs.req_pkt->params[0].parami[5] = param5;
+	rs.req_pkt->params[0].loc[0].x0 = r.left();
+	rs.req_pkt->params[0].loc[0].y0 = r.top();
+	rs.req_pkt->params[0].loc[0].x1 = r.right();
+	rs.req_pkt->params[0].loc[0].y1 = r.bottom();
+	rs.req_pkt->params[0].loc[0].opt = opt;
+	qInfo("extract_ml %s (%d,%d)_(%d,%d), lmin=%d, lmax=%d p1=%x p2=%x p3=%x p4=%x p5=%x opt=%x", prj.c_str(),
+		r.left(), r.top(), r.right(), r.bottom(), layer_min, layer_max, param1,
+		param2, param3, param4, param5, opt);
+	req_queue.push_back(rs);
+	process_req_queue();
 }
 
 void SearchObject::server_connected(QSharedPointer<RakNet::Packet> packet)
@@ -509,6 +641,34 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
         else
             emit extract_single_wire_done(QSharedPointer<SearchResults>(prst, search_result_del));
         break;
+	case VWML_TRAIN:
+	case VWML_EXTRACT:
+		for (unsigned i = 0; i < rsp_pkt->rsp_search_num; i++) {
+			MarkObj obj;
+			unsigned short t = rsp_pkt->result[i].opt;
+			obj.type = t >> 8;
+			obj.type3 = t & 0xff;
+			if (rsp_pkt->command == VWML_EXTRACT)
+				obj.type2 = (obj.type == OBJ_POINT) ? POINT_VIA_AUTO_EXTRACT1 : LINE_WIRE_AUTO_EXTRACT;
+			else
+				obj.type2 = (obj.type == OBJ_POINT) ? current_ml_train : LINE_NORMAL_WIRE0;
+			obj.state = 0;
+			obj.prob = rsp_pkt->result[i].prob;
+			obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);
+			obj.p1 = QPoint(rsp_pkt->result[i].x1, rsp_pkt->result[i].y1);
+			if (obj.type == OBJ_POINT && (obj.p1.x() < 1 || obj.p1.y() < 1))
+				continue;
+			prst->objs.push_back(obj);
+		}
+		if (rsp_pkt->command == VWML_TRAIN) {
+			qInfo("VWML train num=%d finish", prst->objs.size());
+			emit train_via_ml_done(QSharedPointer<SearchResults>(prst, search_result_del));
+		}
+		else {
+			qInfo("VWML extract num=%d finish", prst->objs.size());
+			emit extract_ml_done(QSharedPointer<SearchResults>(prst, search_result_del));
+		}
+		break;
     default:
         qCritical("Response command error %d!", rsp_pkt->command);
     }

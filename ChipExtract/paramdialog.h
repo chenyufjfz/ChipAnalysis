@@ -21,10 +21,12 @@ public:
     float cell_param1;
     float cell_param2;
     float cell_param3;
-    bool choose_cell;
+    int choose;
     bool parallel;
+	int dia[15];
+	int layer_min, layer_max;
 public:
-    explicit ParamDialog(QWidget *parent = 0);
+    explicit ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWidget *parent = 0);
     ~ParamDialog();
 
 private slots:
@@ -37,6 +39,8 @@ private slots:
     void on_lineEdit_editingFinished();
 
     void on_pushButton_3_clicked();
+
+    void on_pushButton_4_clicked();
 
 private:
     Ui::ParamDialog *ui;

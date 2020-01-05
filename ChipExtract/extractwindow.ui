@@ -31,7 +31,10 @@
     <addaction name="actionExtract"/>
     <addaction name="separator"/>
     <addaction name="actionMark_Cell"/>
+    <addaction name="actionMark_Via"/>
+    <addaction name="actionMark_NoVia"/>
     <addaction name="actionMark_Extract_Area"/>
+    <addaction name="separator"/>
     <addaction name="actionLoad_Objects"/>
     <addaction name="actionClear_Objects"/>
     <addaction name="actionClear_Wire_Via"/>
@@ -76,6 +79,9 @@
    </property>
   </action>
   <action name="actionMark_Cell">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="text">
     <string>Mark Cell</string>
    </property>
@@ -86,6 +92,9 @@
    </property>
   </action>
   <action name="actionMark_Extract_Area">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="text">
     <string>Mark Extract Area</string>
    </property>
@@ -131,6 +140,22 @@
   <action name="actionClear_Wire_Via">
    <property name="text">
     <string>Clear Wire&amp;Via</string>
+   </property>
+  </action>
+  <action name="actionMark_Via">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Mark Via</string>
+   </property>
+  </action>
+  <action name="actionMark_NoVia">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Mark NoVia</string>
    </property>
   </action>
  </widget>
