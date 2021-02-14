@@ -35,11 +35,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_actionTrain_triggered()
 {
-	vector<int> dia;
+	vector<int> dia, wide_x, wide_y;
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 	Q_ASSERT(connect_view != NULL);
 	connect_view->get_dia(dia);
-    ParamDialog param_dlg(dia, -1, -1);
+    ParamDialog param_dlg(dia, wide_x, wide_y, -1, -1);
     if (param_dlg.exec() == QDialog::Accepted) {
         if (param_dlg.choose == 1)
             connect_view->cell_train(0, 0, 0, 0, param_dlg.cell_param1,
@@ -54,12 +54,12 @@ void MainWindow::on_actionTrain_triggered()
 
 void MainWindow::on_actionExtract_triggered()
 {
-	vector<int> dia;
+	vector<int> dia, wide_x, wide_y;
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 	Q_ASSERT(connect_view != NULL);
-	int layer_min = connect_view->get_current_layer();
-	int layer_max = connect_view->get_current_layer();
-    ParamDialog param_dlg(dia, layer_min, layer_max);
+	connect_view->get_wide_xy(wide_x, wide_y);
+	int layer = connect_view->get_current_layer();
+	ParamDialog param_dlg(dia, wide_x, wide_y, layer, layer);
     if (param_dlg.exec() == QDialog::Accepted) {		
         if (param_dlg.choose == 1)
             connect_view->cell_extract(0, 0, 0, 0, param_dlg.cell_param1,
@@ -72,8 +72,12 @@ void MainWindow::on_actionExtract_triggered()
 #endif
 		}
 		if (param_dlg.choose == 2) {
-			connect_view->set_dia(dia);			
-			connect_view->vwml_extract(param_dlg.layer_min, param_dlg.layer_max, param_dlg.parallel ? SEARCH_PARALLEL : 0);
+			for (int i = 0; i < (int)min(sizeof(param_dlg.wide_x) / sizeof(int), wide_x.size()); i++)
+				wide_x[i] = param_dlg.wide_x[i];
+			for (int i = 0; i < (int)min(sizeof(param_dlg.wide_y) / sizeof(int), wide_y.size()); i++)
+				wide_y[i] = param_dlg.wide_y[i];
+			connect_view->set_wide_xy(wide_x, wide_y);
+			connect_view->vwml_extract(param_dlg.layer_min, param_dlg.parallel ? SEARCH_PARALLEL : 0);
 		}
     }
 
@@ -100,7 +104,7 @@ void MainWindow::on_actionLoad_Objects_triggered()
     QString image_file_name = QFileDialog::getOpenFileName( this,
                             "open file",
                             "C:/chenyu/work/ChipPintu/ViaWireExtract/");
-    connect_view->load_objects(image_file_name.toStdString());
+	connect_view->load_objects(string((const char *)image_file_name.toLocal8Bit()));
     warning_objs.clear();
     warning_idx = 0;
 }
@@ -108,7 +112,7 @@ void MainWindow::on_actionLoad_Objects_triggered()
 void MainWindow::mouse_change(QPoint pos, QString msg)
 {
     char s[200];
-    sprintf(s, "x%3d:%d,y%3d:%d, %s", pos.x() / 1024, pos.x(), pos.y() /1024, pos.y(), msg.toStdString().c_str());
+	sprintf(s, "x%3d:%d,y%3d:%d, %s", pos.x() / 1024, pos.x(), pos.y() / 1024, pos.y(), (const char *)msg.toLocal8Bit());
     status_label->setText(s);
 }
 
@@ -204,7 +208,7 @@ void MainWindow::on_actionNew_View_triggered()
                                                     "C:/chenyu/data/",
                                                     tr("Project (*.prj)"));
 
-    ConnectView * connect_view = new ConnectView(fileName.toStdString().c_str(), this);
+	ConnectView * connect_view = new ConnectView((const char *)fileName.toLocal8Bit(), this);
 
     connect(connect_view, SIGNAL(mouse_change(QPoint, QString)), this, SLOT(mouse_change(QPoint, QString)));
     views.addWidget(connect_view);
@@ -280,4 +284,11 @@ void MainWindow::on_actionMark_NoVia_triggered()
     ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
     Q_ASSERT(connect_view != NULL);
     connect_view->set_mark(OBJ_POINT, POINT_NO_VIA);
+}
+
+void MainWindow::on_actionMark_Wire_Insu_Edge_triggered()
+{
+	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
+	Q_ASSERT(connect_view != NULL);
+	connect_view->set_mark(OBJ_POINT, POINT_WIRE_INSU);
 }

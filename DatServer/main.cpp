@@ -15,7 +15,7 @@ void print_stack(void)
     unsigned int   i;
     void         * stack[100];
     unsigned short frames;
-    SYMBOL_INFO  * symbol;
+	SYMBOL_INFO  * symbol;
     HANDLE         process;
 
     process = GetCurrentProcess();

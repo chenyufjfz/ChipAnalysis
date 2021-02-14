@@ -29,23 +29,17 @@ static void decouple_prj_license(unsigned char * str, string & prj, string & lic
 	int k = str[0];
 	prj = string((char*)&(str[1]), k);
 	license = string((char*)&(str[k + 2]), str[k + 1]);
+    qInfo("prj=%s, license=%s", prj.c_str(), license.c_str());
 }
 
 CellExtractService::CellExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
 	token = _token;
-    for (int i=0; i<sizeof(ce)/sizeof(ce[0]); i++)
-        ce[i] = NULL;
 	qInfo("CellExtractfor token:%d is created", token);
 }
 
 CellExtractService::~CellExtractService()
 {
-	for (int i = 0; i < sizeof(ce) / sizeof(ce[0]); i++) {
-		if (ce[i])
-			delete ce[i];
-		ce[i] = NULL;
-	}
 	qInfo("CellExtractfor token:%d is destroyed", token);
 }
 void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet)
@@ -57,46 +51,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 
     switch (req_pkt->command) {
         case CELL_TRAIN:
-        if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam))
-            qCritical("receive cell train req length error!");
-        else {
-            ReqSearchParam * pa = &(req_pkt->params[0]);
-            unsigned char layer[8];
-            unpack_layer(layer, pa->parami[0]);
-            unpack_layer(&layer[4], pa->parami[1]);
-
-            for (int i = 0; i < 8; i++)
-				if (layer[i] < bk_img->getLayerNum()) {
-					if (ce[layer[i]] == NULL)
-						ce[layer[i]] = new CellExtract;
-                    ce[layer[i]]->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
-                        pa->parami[7], pa->parami[8], pa->parami[9], pa->parami[10], pa->paramf);
-					MarkObj obj;
-					vector<MarkObj> objs;
-					obj.type = OBJ_AREA;
-					obj.type2 = AREA_CELL;
-					obj.type3 = pa->loc[0].opt;
-					obj.p0 = QPoint(pa->loc[0].x0, pa->loc[0].y0);
-					obj.p1 = QPoint(pa->loc[0].x1, pa->loc[0].y1);
-					objs.push_back(obj);
-                    qInfo("start cell train l=%d, dir=%x, (%d,%d)_(%d,%d)", (int) layer[i], obj.type3,
-                          obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y());
-					vector<ICLayerWrInterface *> pic;
-                    pic.push_back(bk_img->get_layer(layer[i]));
-					if (pic.back() != NULL)
-						ce[layer[i]]->train(pic, objs);
-					else
-						qCritical("ce train receive layer[%d]=%d, invalid", i, layer[i]);
-					break;
-				}
-            RspSearchPkt rsp_pkt;
-            rsp_pkt.typeId = ID_RESPONSE_OBJ_SEARCH;
-            rsp_pkt.command = CELL_TRAIN;
-			rsp_pkt.token = req_pkt->token;
-            rsp_pkt.rsp_search_num = 0;
-            rak_peer->Send((char*) &rsp_pkt, sizeof(RspSearchPkt), MEDIUM_PRIORITY,
-                RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
-        }
+			qCritical("Not used now");
         break;
 
         case CELL_EXTRACT:
@@ -109,26 +64,44 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 			unpack_layer(layer, pa->parami[0]);
 			unpack_layer(&layer[4], pa->parami[1]);
 
+			vector<ICLayerWrInterface *> pic;
 			for (int i = 0; i < 8; i++)
-				if (layer[i] < bk_img->getLayerNum()) {
-					if (ce[layer[i]] == NULL) {
-						qCritical("receive cell extract req before train!");
-						break;
-					}
-                    ce[layer[i]]->set_extract_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
-						pa->parami[7], pa->parami[8], pa->parami[9], pa->parami[10], pa->paramf);
-					vector<SearchArea> areas;
-					for (int j = 0; j < req_pkt->req_search_num; j++)
-						areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
-						pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
-					vector<MarkObj> objs;
-					vector<ICLayerWrInterface *> pic;
-                    qInfo("start cell extract, layer=%d", layer[i]);
-                    pic.push_back(bk_img->get_layer(layer[i]));
-					if (pic.back() != NULL)
-						ce[layer[i]]->extract(pic, areas, objs);
-					else
-						qCritical("cell_extract_req Receive layer[%d]=%d, invalid", i, layer[i]);                    
+			if (layer[i] < bk_img->getLayerNum()) {
+				pic.push_back(bk_img->get_layer(layer[i]));
+				if (pic.back() == NULL) {
+					qCritical("ce train receive layer[%d]=%d, invalid", i, layer[i]);
+					return;
+				}
+			}
+
+			QScopedPointer< CellExtract > ce(new CellExtract);
+			ce->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
+				pa->parami[7], pa->parami[8], pa->parami[9], pa->parami[10], pa->paramf);
+			MarkObj obj;
+			vector<MarkObj> objs;
+			obj.type = OBJ_AREA;
+			obj.type2 = AREA_CELL;
+			obj.type3 = pa->loc[0].opt;
+			obj.p0 = QPoint(pa->loc[0].x0, pa->loc[0].y0);
+			obj.p1 = QPoint(pa->loc[0].x1, pa->loc[0].y1);
+			objs.push_back(obj);
+			qInfo("start cell train l=%d, dir=%x, (%d,%d)_(%d,%d)", (int)layer[0], obj.type3,
+				obj.p0.x(), obj.p0.y(), obj.p1.x(), obj.p1.y());
+			ce->train(pic, objs);
+			ce->set_extract_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
+				pa->parami[7], pa->parami[8], pa->parami[9], pa->parami[10], pa->paramf);
+
+			vector<SearchArea> areas;
+			for (int j = 1; j < req_pkt->req_search_num; j++) {
+				areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
+					pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
+				qInfo("Extract rect, dir=%x, (%d,%d)_(%d,%d)", areas.back().option, areas.back().rect.left(),
+					areas.back().rect.top(), areas.back().rect.right(), areas.back().rect.bottom());
+			}
+			
+			objs.clear();
+			ce->extract(pic, areas, objs);
+				
 					//send response
                     unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
 					RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
@@ -150,7 +123,6 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
                     free(rsp_pkt);
 					break;
 				}
-		}
         break;
     }
     
@@ -218,7 +190,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
                     return;
                 }
 			}
-			VWExtract * vwe = VWExtract::create_extract(0);
+			QScopedPointer< VWExtract > vwe(VWExtract::create_extract(0));
             for (int l = 0; l<req_pkt->req_search_num; l++) {
 				if (pa[l].parami[0] >= 0) {
 					vwe->set_extract_param(anti_map_layer[pa[l].parami[0]], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
@@ -242,6 +214,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
             vector<MarkObj> objs;
 			if (!invalid_req)
 				vwe->extract(pic, search, objs);
+			
 #if DUMP_RESULT
             FILE * fp;
             int scale = 32768 / bk_img->getBlockWidth();
@@ -285,26 +258,32 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
         }
         break;
     case SINGLE_WIRE_EXTRACT:
-        if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
+		if (packet->length != sizeof(ReqSearchPkt)+sizeof(ReqSearchParam)+
+			(req_pkt->req_search_num - 1) * sizeof(Location))
             qCritical("receive single extract req length error!");
         else {
             ReqSearchParam * pa = &(req_pkt->params[0]);
-            vector<ICLayerWrInterface *> pic;
-            vector<SearchArea> search;
+            vector<ICLayerWrInterface *> pic;            
             vector<MarkObj> objs;
             vwe_single->set_extract_param(pa[0].parami[0], pa[0].parami[1], pa[0].parami[2], pa[0].parami[3], pa[0].parami[4],
                     pa[0].parami[5], pa[0].parami[6], pa[0].parami[7], pa[0].parami[8], pa[0].paramf);
-            qInfo("extract single wire l=%d, i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,x0=%d,y0=%d,f=%f",
-                  pa[0].parami[0], pa[0].parami[1], pa[0].parami[2], pa[0].parami[3], pa[0].parami[4],
-                  pa[0].parami[5], pa[0].parami[6], pa[0].loc[0].x0, pa[0].loc[0].y0, pa[0].paramf);
-            QRect rect(QPoint(pa[0].loc[0].x0, pa[0].loc[0].y0), QPoint(pa[0].loc[0].x1, pa[0].loc[0].y1));
-            search.push_back(SearchArea(rect, 0));
-            pic.push_back(bk_img->get_layer(pa[0].parami[0]));
-            if (pic.back() == NULL) {
-                qCritical("vw_extract_req receive layer=%d, invalid", pa[0].parami[0]);
-                return;
-            }
-            vwe_single->extract(pic, search, objs);
+			pic.push_back(bk_img->get_layer(pa[0].parami[0]));
+			if (pic.back() == NULL) {
+				qCritical("vw_extract_req receive layer=%d, invalid", pa[0].parami[0]);
+				return;
+			}
+
+			for (int i = 0; i < req_pkt->req_search_num; i++) {
+				vector<SearchArea> search;
+				qInfo("extract single wire l=%d, i1=%x,i2=%x,i3=%x,i4=%x,i5=%x,i6=%x,x0=%d,y0=%d,f=%f",
+					pa[0].parami[0], pa[0].parami[1], pa[0].parami[2], pa[0].parami[3], pa[0].parami[4],
+					pa[0].parami[5], pa[0].parami[6], pa[0].loc[i].x0, pa[0].loc[i].y0, pa[0].paramf);
+				QRect rect(QPoint(pa[0].loc[i].x0, pa[0].loc[i].y0), QPoint(pa[0].loc[i].x1, pa[0].loc[i].y1));
+				search.push_back(SearchArea(rect, 0));
+				vector<MarkObj> result;
+				vwe_single->extract(pic, search, result);
+				objs.insert(objs.end(), result.begin(), result.end());
+			}
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
             RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
@@ -350,9 +329,9 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 					pa->parami[6], pa->parami[7], pa->parami[8], pa->paramf);				
 				for (int i = 0; i < req_pkt->req_search_num; i++) {
 					MarkObj obj;					
-					obj.type = pa->parami[0] & 0xff;
-					obj.type2 = pa->loc[i].opt & 0xff;
-					obj.type3 = pa->loc[i].opt >> 8 & 0xff;
+					obj.type = pa->loc[i].opt & 0xff;
+					obj.type2 = pa->loc[i].opt >> 8 & 0xff;
+					obj.type3 = pa->parami[0] & 0xff;
 					obj.p0 = QPoint(pa->loc[i].x0, pa->loc[i].y0);
 					obj.p1 = QPoint(pa->loc[i].x1, pa->loc[i].y1);
 					objs.push_back(obj);
@@ -392,7 +371,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 				ploc[j].y1 = objs[j].p1.y();
 				unsigned short t = objs[j].type;
 				ploc[j].opt = t << 8 | objs[j].type3;
-				ploc[j].prob = objs[j].prob;
+				ploc[j].prob = (req_pkt->command == VWML_TRAIN) ? objs[j].type2 : objs[j].prob;
 			}
 			rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
 				RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
@@ -414,7 +393,7 @@ ServerPerClient::ServerPerClient(RakNet::SystemAddress cli_addr_, QObject *paren
 	cli_addr = cli_addr_;
 	qInfo("Server for %s is created.", cli_addr.ToString());
 	work_thread = new QThread;
-	work_thread->start();
+    work_thread->start();
 	if (!connect(work_thread, SIGNAL(finished()), work_thread, SLOT(deleteLater())))
 		qFatal("Connect thread finished failed");
 }

@@ -24,9 +24,11 @@ public:
     int choose;
     bool parallel;
 	int dia[15];
+	int wide_x[10];
+	int wide_y[10];
 	int layer_min, layer_max;
 public:
-    explicit ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWidget *parent = 0);
+	explicit ParamDialog(vector<int> & dia_, vector<int> & wide_x_, vector<int> & wide_y_, int _layer_min, int _layer_max, QWidget *parent = 0);
     ~ParamDialog();
 
 private slots:

@@ -53,6 +53,8 @@ private slots:
 
     void on_actionMark_NoVia_triggered();
 
+    void on_actionMark_Wire_Insu_Edge_triggered();
+
 private:
     QLabel *status_label;
     Ui::MainWindow *ui;

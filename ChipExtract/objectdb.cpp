@@ -94,6 +94,7 @@ ObjectDB::ObjectDB()
 	root_cell = new AreaObjLink;
 	root_wire = new AreaObjLink;
 	root_via = new AreaObjLink;
+	root_train = new AreaObjLink;
 }
 
 ObjectDB::~ObjectDB()
@@ -108,6 +109,7 @@ ObjectDB::~ObjectDB()
     delete root_cell;
     delete root_wire;
     delete root_via;
+	delete root_train;
 }
 
 void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const QRect &r, vector<ElementObj *> & rst)
@@ -134,7 +136,7 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const Q
 
 	case OBJ_LINE:
         if (t2_mask & (LINE_NORMAL_WIRE0_MASK | LINE_NORMAL_WIRE1_MASK | LINE_NORMAL_WIRE2_MASK
-                       | LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK))
+			| LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK | LINE_WIRE_AUTO_EXTRACT1_MASK))
 			root_wire->get_objects(t1, t2_mask, r, rst);
 		break;
 
@@ -144,6 +146,8 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, const Q
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
 			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
 			root_via->get_objects(t1, t2_mask, r, rst);
+		if (t2_mask & (POINT_WIRE_INSU_MASK | POINT_WIRE_MASK | POINT_INSU_MASK))
+			root_train->get_objects(t1, t2_mask, r, rst);
 		break;
 	}
 	
@@ -161,7 +165,7 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, float p
 
     case OBJ_LINE:
         if (t2_mask & (LINE_NORMAL_WIRE0_MASK | LINE_NORMAL_WIRE1_MASK | LINE_NORMAL_WIRE2_MASK
-                       | LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK))
+			| LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK | LINE_WIRE_AUTO_EXTRACT1_MASK))
             root_wire->get_objects(t1, t2_mask, prob, rst);
         break;
 
@@ -171,6 +175,8 @@ void ObjectDB::get_objects(unsigned char t1, unsigned long long t2_mask, float p
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
 			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
             root_via->get_objects(t1, t2_mask, prob, rst);
+		if (t2_mask & (POINT_WIRE_INSU_MASK | POINT_WIRE_MASK | POINT_INSU_MASK))
+			root_train->get_objects(t1, t2_mask, prob, rst);
         break;
     }
 
@@ -186,7 +192,7 @@ void ObjectDB::del_objects(unsigned char t1, unsigned long long t2_mask, float p
 
     case OBJ_LINE:
         if (t2_mask & (LINE_NORMAL_WIRE0_MASK | LINE_NORMAL_WIRE1_MASK | LINE_NORMAL_WIRE2_MASK
-                       | LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK))
+			| LINE_NORMAL_WIRE3_MASK | LINE_WIRE_AUTO_EXTRACT_MASK | LINE_WIRE_AUTO_EXTRACT1_MASK))
             root_wire->del_objects(t1, t2_mask, prob);
         break;
 
@@ -196,6 +202,8 @@ void ObjectDB::del_objects(unsigned char t1, unsigned long long t2_mask, float p
         if (t2_mask & (POINT_NORMAL_VIA0_MASK | POINT_NORMAL_VIA1_MASK | POINT_NORMAL_VIA2_MASK |
 			POINT_NORMAL_VIA3_MASK | POINT_VIA_AUTO_EXTRACT_MASK | POINT_VIA_AUTO_EXTRACT1_MASK | POINT_NO_VIA_MASK))
             root_via->del_objects(t1, t2_mask, prob);
+		if (t2_mask & (POINT_WIRE_INSU_MASK | POINT_WIRE_MASK | POINT_INSU_MASK))
+			root_train->del_objects(t1, t2_mask, prob);
         break;
     }
 }
@@ -210,8 +218,7 @@ void ObjectDB::add_object(ElementObj & obj)
 		break;
 
 	case OBJ_LINE:
-        if (obj.type2 >= LINE_NORMAL_WIRE0 && obj.type2 <= LINE_WIRE_AUTO_EXTRACT)
-			root_wire->link_object(p_obj);
+        root_wire->link_object(p_obj);
 		break;
 
 	case OBJ_POINT:
@@ -219,6 +226,8 @@ void ObjectDB::add_object(ElementObj & obj)
 			root_cell->link_object(p_obj);
 		if (obj.type2 >= POINT_NORMAL_VIA0 && obj.type2 <= POINT_NO_VIA)
 			root_via->link_object(p_obj);
+		if (obj.type2 >= POINT_WIRE_INSU && obj.type2 <= POINT_INSU)
+			root_train->link_object(p_obj);
 		break;
 
 	case OBJ_PARA:
@@ -243,14 +252,15 @@ void ObjectDB::del_object(ElementObj * p_obj)
 		break;
 
 	case OBJ_LINE:
-		if (p_obj->type2 >= LINE_NORMAL_WIRE0 && p_obj->type2 <= LINE_NORMAL_WIRE3)
-			root_wire->delink_object(p_obj);
+		root_wire->delink_object(p_obj);
 		break;
 	case OBJ_POINT:
 		if (p_obj->type2 == POINT_CELL)
 			root_cell->delink_object(p_obj);
 		if (p_obj->type2 >= POINT_NORMAL_VIA0 && p_obj->type2 <= POINT_NO_VIA)
 			root_via->delink_object(p_obj);
+		if (p_obj->type2 >= POINT_WIRE_INSU && p_obj->type2 <= POINT_INSU)
+			root_train->delink_object(p_obj);
 		break;
 		
 	case OBJ_PARA:
@@ -278,6 +288,7 @@ void ObjectDB::clear_all()
     root_area->clear_all();
     root_cell->clear_all();
     root_via->clear_all();
+	root_train->clear_all();
     root_wire->clear_all();
     for (unsigned i = 0; i < (int) sizeof(layer_wire_info) / sizeof(layer_wire_info[0]); i++)
         if (layer_wire_info[i] != NULL) {
@@ -298,6 +309,8 @@ int ObjectDB::load_objets(string file_name)
         return -1;
     ElementObj obj;
     char line[800];
+	char * context;
+	char * cmd;
     while (!feof(fp)) {
         unsigned t;
         int x0, y0, x1, y1, n;
@@ -323,18 +336,54 @@ int ObjectDB::load_objets(string file_name)
             pass = (n==5);
             t = OBJ_AREA << 16 | AREA_CELL << 8 | t;
             break;
+		case 'p':
+			cmd = strtok_s(line, ",", &context);
+			if (strcmp(cmd, "polygon") == 0) {
+				int x, y, s;
+				unsigned long long id;
+				pass = false;				
+				cmd = strtok_s(NULL, ",", &context);
+				if (cmd && sscanf(cmd, "id=%lld s=%d l=%d", &id, &s, &t) == 3) {
+					vector<QPoint> poly;
+					t = OBJ_LINE << 16 | LINE_WIRE_AUTO_EXTRACT1 << 8 | t;
+					obj.type3 = t & 0xff;
+					obj.type2 = t >> 8 & 0xff;
+					obj.type = t >> 16 & 0xff;
+					obj.prob = 1;
+					obj.un.attach = id;
+					do {
+						cmd = strtok_s(NULL, ",", &context);
+						if (cmd == NULL)
+							break;
+						if (strstr(cmd, "end") != NULL)
+							break;
+						if (strstr(cmd, "\\") != NULL) {
+							fgets(line, sizeof(line), fp);
+							cmd = strtok_s(line, ",", &context);
+						}
+						sscanf(cmd, "%d %d", &x, &y);
+						poly.push_back(QPoint(x, y));
+					} while (1);
+					for (int i = 0; i < (int)poly.size(); i++) {
+						obj.p0 = poly[i];
+						obj.p1 = (i + 1 == poly.size()) ? poly[0] : poly[i + 1];
+						add_object(obj);
+					}
+				}
+			}
+			break;
         }
-
-        obj.p0.setX(x0);
-        obj.p0.setY(y0);
-        obj.p1.setX(x1);
-        obj.p1.setY(y1);
-        obj.type3 = t & 0xff;
-        obj.type3 = obj.type3;//TODO repair me
-        obj.type2 = t >> 8 & 0xff;
-        obj.type = t >> 16 & 0xff;
-        obj.prob = prob;
-        add_object(obj);
+		if (pass) {
+			obj.p0.setX(x0);
+			obj.p0.setY(y0);
+			obj.p1.setX(x1);
+			obj.p1.setY(y1);
+			obj.type3 = t & 0xff;
+			obj.type2 = t >> 8 & 0xff;
+			obj.type = t >> 16 & 0xff;
+			obj.prob = prob;
+			add_object(obj);
+		}
     }
     fclose(fp);
     return 0;

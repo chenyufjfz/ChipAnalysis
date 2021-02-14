@@ -56,6 +56,7 @@ protected:
 	AreaObjLink * root_wire;
 	AreaObjLink * root_via;
 	AreaObjLink * root_area;
+	AreaObjLink * root_train;
     QMutex mutex;
 
 protected:

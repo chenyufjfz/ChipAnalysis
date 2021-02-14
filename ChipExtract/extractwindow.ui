@@ -20,7 +20,7 @@
      <x>0</x>
      <y>0</y>
      <width>400</width>
-     <height>26</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuEdit">
@@ -33,6 +33,7 @@
     <addaction name="actionMark_Cell"/>
     <addaction name="actionMark_Via"/>
     <addaction name="actionMark_NoVia"/>
+    <addaction name="actionMark_Wire_Insu_Edge"/>
     <addaction name="actionMark_Extract_Area"/>
     <addaction name="separator"/>
     <addaction name="actionLoad_Objects"/>
@@ -156,6 +157,11 @@
    </property>
    <property name="text">
     <string>Mark NoVia</string>
+   </property>
+  </action>
+  <action name="actionMark_Wire_Insu_Edge">
+   <property name="text">
+    <string>Mark Wire Insu Edge</string>
    </property>
   </action>
  </widget>

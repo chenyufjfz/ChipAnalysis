@@ -87,8 +87,11 @@ void ServerThread::run()
 
             case ID_REQUIRE_OBJ_SEARCH:
                 need_delete=false;
-                if (server == NULL)
-                    qFatal("Connected Client can't find ServerPerClient");
+                if (server == NULL) {
+                    qCritical("Connected Client can't find ServerPerClient %s", packet->systemAddress.ToString());
+                    server = new ServerPerClient(packet->systemAddress);
+                    server_pools[packet->guid.g] = server;
+                }
 				server->handle_client_req(QSharedPointer<RakNet::Packet>(packet, packet_del));
                 break;
 
@@ -99,9 +102,10 @@ void ServerThread::run()
             if (need_delete)
                 rak_peer->DeallocatePacket(packet);
         }
-        RakSleep(10);
+		RakSleep(10);
         RakNet::TimeMS current_time = RakNet::GetTimeMS();
-        if (current_time -last_printtime>=60000){
+		/*
+        if (current_time -last_printtime>=6000000){
             last_printtime = current_time;
             char text[2048];
             RakNet::RakNetStatistics rss;
@@ -110,7 +114,7 @@ void ServerThread::run()
                 RakNet::StatisticsToString(&rss, text, 2);
                 qDebug("%s", text);
             }
-        }
+        }*/
     }
 	
     RakNet::RakPeerInterface::DestroyInstance(rak_peer);

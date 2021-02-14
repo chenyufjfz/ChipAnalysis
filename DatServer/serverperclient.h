@@ -15,7 +15,6 @@ using namespace std;
 class CellExtractService : public QObject {
     Q_OBJECT
 protected:
-    CellExtract * ce[64];
 	unsigned token;
 
 public:

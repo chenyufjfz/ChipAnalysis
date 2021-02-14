@@ -30,11 +30,13 @@ ConnectView::ConnectView(const char * prj_name, QWidget *parent) : QWidget(paren
 	render_bk_layer = 255;
 	bk_layer_2 = 0;
 	scale_2 = 1;
-    license = "";
+    license = ""; //"0A(12)@20";
 	screen_2= QRect(300, 200, 300, 200);
 	view_rect_2 = QRect(screen_2.x(), screen_2.y(), screen_2.width(), screen_2.height());
 	center_2 = view_rect_2.center(); 
 	dia.resize(15, 10);
+	wide_x.resize(10, 5);
+	wide_y.resize(10, 5);
 #if 0
     ElementObj obj;
     obj.type = OBJ_AREA;
@@ -81,6 +83,18 @@ void ConnectView::get_dia(vector<int> & dia_)
 void ConnectView::set_dia(const vector<int> & dia_)
 {
 	dia = dia_;
+}
+
+void ConnectView::get_wide_xy(vector<int> & wide_x_, vector<int> & wide_y_)
+{
+	wide_x_ = wide_x;
+	wide_y_ = wide_y;
+}
+
+void ConnectView::set_wide_xy(const vector<int> & wide_x_, const vector<int> & wide_y_)
+{
+	wide_x = wide_x_;
+	wide_y = wide_y_;
 }
 
 void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
@@ -161,17 +175,31 @@ void ConnectView::draw_element(QPainter &painter)
 		painter.drawRect(QRect(p0, p1));
 	}
 
-    odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, view_rect, rst);
+	odb.get_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK | LINE_WIRE_AUTO_EXTRACT1_MASK, view_rect, rst);
     bool draw_wire_end = (view_rect.height() < 800);
     painter.setBrush(QBrush(Qt::NoBrush));
     if (rst.size()!=0)
         qDebug("draw %d lines", rst.size());
     for (unsigned i = 0; i < rst.size(); i++) {
         if (rst[i]->type3 == bk_layer) {
-            if (rst[i]->prob > 0.9)
-                painter.setPen(QPen(Qt::blue, 1));
-            else
-                painter.setPen(QPen(Qt::yellow, 1));
+			if (rst[i]->type2 != LINE_WIRE_AUTO_EXTRACT1) {
+				if (rst[i]->prob > 0.9)
+					painter.setPen(QPen(Qt::blue, 1));
+				else
+					painter.setPen(QPen(Qt::yellow, 1));
+			}
+			else {
+				int r = (rst[i]->un.attach ^ rst[i]->un.attach >> 24) & 0xff;
+				int g = (rst[i]->un.attach >> 8 ^ rst[i]->un.attach >> 32) & 0xff;
+				int b = (rst[i]->un.attach >> 16 ^ rst[i]->un.attach >> 40) & 0xff;
+				if (r >= g && r >= b)
+					r |= 128; //make it bright
+				if (g >= r && g >= b)
+					g |= 128;
+				if (b >= r && b >= g)
+					b |= 128;
+				painter.setPen(QPen(QColor(r, g, b), 1));
+			}				
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
                 height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
             QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
@@ -186,7 +214,7 @@ void ConnectView::draw_element(QPainter &painter)
     painter.setPen(QPen(Qt::green, 2));
     painter.setBrush(QBrush(Qt::NoBrush));
     if (rst.size()!=0)
-        qDebug("draw %d vias", rst.size());
+        qDebug("draw %d via extract", rst.size());
     for (unsigned i = 0; i < rst.size(); i++) {
         if (rst[i]->type3 == bk_layer) {
             QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
@@ -211,6 +239,21 @@ void ConnectView::draw_element(QPainter &painter)
 			QPoint p1(width() * (rst[i]->p0.x() - view_rect.left() + rst[i]->p1.x() / 2) / view_rect.width(),
 				height()* (rst[i]->p0.y() - view_rect.top() + rst[i]->p1.y() / 2) / view_rect.height());
 			painter.drawEllipse(QRect(p0, p1));
+		}
+	}
+
+	odb.get_objects(OBJ_POINT, POINT_WIRE_INSU_MASK | POINT_WIRE_MASK | POINT_INSU_MASK, view_rect, rst);
+	painter.setPen(QPen(Qt::green, 2));
+	painter.setBrush(QBrush(Qt::NoBrush));
+	if (rst.size() != 0)
+		qDebug("draw %d train objs", rst.size());
+	for (unsigned i = 0; i < rst.size(); i++) {
+		if (rst[i]->type3 == bk_layer) {
+			painter.setPen(QPen(Qt::green, 2));
+			if (rst[i]->type2 == POINT_WIRE_INSU)
+				painter.drawLine(rst[i]->p0, rst[i]->p1);
+			else
+				painter.drawRect(rst[i]->p0.x() - 1, rst[i]->p0.y() - 1, 3, 3);
 		}
 	}
 
@@ -566,7 +609,7 @@ void ConnectView::clear_objs()
 
 void ConnectView::clear_wire_via()
 {
-    odb.del_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK, 1.1);
+	odb.del_objects(OBJ_LINE, LINE_WIRE_AUTO_EXTRACT_MASK | LINE_WIRE_AUTO_EXTRACT1_MASK, 1.1);
     odb.del_objects(OBJ_POINT, POINT_VIA_AUTO_EXTRACT_MASK, 1.1);
     update();
 }
@@ -591,8 +634,10 @@ void ConnectView::mouseMoveEvent(QMouseEvent *event)
 void ConnectView::mousePressEvent(QMouseEvent *event)
 {
     QPoint mp = event->pos() * scale + view_rect.topLeft();
+	vector<QPoint> org;
+	org.push_back(mp);
     if (QGuiApplication::queryKeyboardModifiers() == Qt::ControlModifier) {
-        single_wire_extract(bk_layer, 5, 128, 0, 39, 0, mp, -1, -1, 1);
+        single_wire_extract(bk_layer, 5, 128, 0, 39, 0, org, -1, -1, 0xf);
         return;
     }
     if (ms.state == CREATE_NEW_OBJ) {
@@ -608,6 +653,8 @@ void ConnectView::mousePressEvent(QMouseEvent *event)
 				ml_via_train(bk_layer, dia[bk_layer], dia[bk_layer] + 1, 1, mp);
 			if (ms.type2 == POINT_NO_VIA)
 				ml_via_train(bk_layer, dia[bk_layer], dia[bk_layer] + 1, 0, mp);
+			if (ms.type2 == POINT_WIRE_INSU)
+				ml_wire_train(bk_layer, POINT_WIRE_INSU, mp);
 		}
     }
 }
@@ -695,7 +742,7 @@ void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
     QMessageBox::about(this, "Extract wire done", "Extract wire done");
 }
 
-void ConnectView::train_via_ml_done(QSharedPointer<SearchResults> prst)
+void ConnectView::train_vw_ml_done(QSharedPointer<SearchResults> prst)
 {
 	for (int i = 0; i < prst->objs.size(); i++) {
 		ElementObj obj(prst->objs[i]);
@@ -705,14 +752,19 @@ void ConnectView::train_via_ml_done(QSharedPointer<SearchResults> prst)
 	update();
 }
 
-void ConnectView::del_via_ml_done()
+void ConnectView::del_vw_ml_done()
 {
 
 }
 
+void ConnectView::get_train_vw_ml_done(QSharedPointer<SearchResults> prst)
+{
+	odb.del_objects(OBJ_POINT, POINT_WIRE_INSU_MASK | POINT_WIRE_MASK | POINT_INSU_MASK | POINT_NORMAL_VIA0_MASK, 2);
+	train_vw_ml_done(prst);
+}
+
 void ConnectView::extract_ml_done(QSharedPointer<SearchResults> prst)
 {
-	train_via_ml_done(prst);
 	update();
 }
 
@@ -752,7 +804,7 @@ void ConnectView::wire_extract(VWSearchRequest & vp, int opt)
 }
 
 void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
-                         int gray_th, int channel, QPoint org, float cr, float cg, int shape_mask)
+                         int gray_th, int channel, vector<QPoint> org, float cr, float cg, int shape_mask)
 {
     opt =0;
     int s=0;
@@ -761,29 +813,72 @@ void ConnectView::single_wire_extract(int layer, int wmin, int wmax, int opt,
         w=w<<1;
         s++;
     }
-    QPoint p =pcst->pixel2bu(org);
-    emit extract_single_wire(prj_file, license, layer, wmin, wmax, 5, opt, gray_th, channel, s, p.x(), p.y(), cr, cg, shape_mask);
+	vector<QPoint> * loc = new vector<QPoint>();
+	for (auto &o : org)
+		loc->push_back(pcst->pixel2bu(o));
+    emit extract_single_wire(prj_file, license, layer, wmin, wmax, 5, opt, gray_th, channel, s, (void*) loc, cr, cg, shape_mask);
 }
 
+/*
+ * Input layer
+ * Input dmin, via diameter min
+ * Input dmax, via diameter max
+ * Input label, 1 means via, 0 means no via
+ * Input v, Via location
+ * Do via training
+ */
 void ConnectView::ml_via_train(int layer, int dmin, int dmax, int label, QPoint v)
 {
 	QPoint p = pcst->pixel2bu(v);
 	emit train_via_ml(prj_file, license, layer, label, dmin, dmax, p.x(), p.y(),
-		0, 0, 0, 0, 0);
+		0, 0, 0, 0);
 }
 
-void ConnectView::ml_via_del(int layer, int d, QPoint v)
+/*
+Input layer
+Input label
+*/
+void ConnectView::ml_wire_train(int layer, int label, QPoint v)
 {
 	QPoint p = pcst->pixel2bu(v);
-	emit del_via_ml(prj_file, license, layer, d, p.x(), p.y());
+	emit train_wire_ml(prj_file, license, layer, label, 6, 6, 6, p.x(), p.y(), 0);
 }
 
-void ConnectView::vwml_extract(int layer_min, int layer_max, int opt)
+/*
+Input layer
+Input d, via diameter
+Input v, Via location
+Del training via
+*/
+void ConnectView::ml_vw_del(int layer, int d, QPoint v)
+{
+	QPoint p = pcst->pixel2bu(v);
+	emit del_vw_ml(prj_file, license, layer, d, p.x(), p.y());
+}
+
+/*
+ * Input layer_min from which layer
+ * Input layer_max to which layer
+ * Input opt,
+ * Extract via
+ */
+void ConnectView::vwml_extract(int layer, int opt)
 {
 	vector<ElementObj*> er;
 	odb.get_objects(OBJ_AREA, AREA_EXTRACT_MASK, QRect(0, 0, pcst->tot_width_pixel(), pcst->tot_height_pixel()), er);
 	QPoint p0 = pcst->pixel2bu(er[0]->p0);
 	QPoint p1 = pcst->pixel2bu(er[0]->p1);
 	QRect r(p0, p1);
-	emit extract_ml(prj_file, license, layer_min, layer_max, QPolygon(r), 0, 0, 0, 0, 0, opt);
+	emit extract_ml(prj_file, license, layer, layer, QPolygon(r), wide_x[layer], wide_y[layer], 6, 0, 0, opt);
+}
+
+/*
+Input layer
+Input d, via diameter
+Input v, Via location
+Del training via
+*/
+void ConnectView::get_ml_obj(int layer)
+{
+	emit get_train_vw_ml(prj_file, license, layer);
 }

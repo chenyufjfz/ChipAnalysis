@@ -2,7 +2,7 @@
 #include "ui_paramdialog.h"
 #include <QFileDialog>
 
-ParamDialog::ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWidget *parent) :
+ParamDialog::ParamDialog(vector<int> & dia_, vector<int> & wide_x_, vector<int> & wide_y_, int _layer_min, int _layer_max, QWidget *parent) :
     QDialog(parent),
     ui(new Ui::ParamDialog)
 {
@@ -10,8 +10,14 @@ ParamDialog::ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWi
 	file_name = "./action.xml";
 	update_action();
 	memset(dia, 0, sizeof(dia));
+	memset(wide_x, 5, sizeof(wide_x));
+	memset(wide_y, 5, sizeof(wide_y));
 	for (int i = 0; i < min(sizeof(dia) / sizeof(int), dia_.size()); i++)
 		dia[i] = dia_[i];
+	for (int i = 0; i < min(sizeof(wide_x) / sizeof(int), wide_x_.size()); i++)
+		wide_x[i] = wide_x_[i];
+	for (int i = 0; i < min(sizeof(wide_y) / sizeof(int), wide_y_.size()); i++)
+		wide_y[i] = wide_y_[i];
 	if (_layer_min < 0 && _layer_max < 0) {
 		ui->dia0->setText(QString::number(dia[0]));
 		ui->dia1->setText(QString::number(dia[1]));
@@ -28,6 +34,27 @@ ParamDialog::ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWi
 		ui->dia12->setText(QString::number(dia[12]));
 		ui->dia13->setText(QString::number(dia[13]));
 		ui->dia14->setText(QString::number(dia[14]));
+
+		ui->wide_x0->setEnabled(false);
+		ui->wide_x1->setEnabled(false);
+		ui->wide_x2->setEnabled(false);
+		ui->wide_x3->setEnabled(false);
+		ui->wide_x4->setEnabled(false);
+		ui->wide_x5->setEnabled(false);
+		ui->wide_x6->setEnabled(false);
+		ui->wide_x7->setEnabled(false);
+		ui->wide_x8->setEnabled(false);
+		ui->wide_x9->setEnabled(false);
+		ui->wide_y0->setEnabled(false);
+		ui->wide_y1->setEnabled(false);
+		ui->wide_y2->setEnabled(false);
+		ui->wide_y3->setEnabled(false);
+		ui->wide_y4->setEnabled(false);
+		ui->wide_y5->setEnabled(false);
+		ui->wide_y6->setEnabled(false);
+		ui->wide_y7->setEnabled(false);
+		ui->wide_y8->setEnabled(false);
+		ui->wide_y9->setEnabled(false);
 		ui->layer_min->setEnabled(false);
 		ui->layer_max->setEnabled(false);
 	}
@@ -47,6 +74,27 @@ ParamDialog::ParamDialog(vector<int> & dia_, int _layer_min, int _layer_max, QWi
 		ui->dia12->setEnabled(false);
 		ui->dia13->setEnabled(false);
 		ui->dia14->setEnabled(false);
+
+		ui->wide_x0->setText(QString::number(wide_x[0]));
+		ui->wide_x1->setText(QString::number(wide_x[1]));
+		ui->wide_x2->setText(QString::number(wide_x[2]));
+		ui->wide_x3->setText(QString::number(wide_x[3]));
+		ui->wide_x4->setText(QString::number(wide_x[4]));
+		ui->wide_x5->setText(QString::number(wide_x[5]));
+		ui->wide_x6->setText(QString::number(wide_x[6]));
+		ui->wide_x7->setText(QString::number(wide_x[7]));
+		ui->wide_x8->setText(QString::number(wide_x[8]));
+		ui->wide_x9->setText(QString::number(wide_x[9]));
+		ui->wide_y0->setText(QString::number(wide_y[0]));
+		ui->wide_y1->setText(QString::number(wide_y[1]));
+		ui->wide_y2->setText(QString::number(wide_y[2]));
+		ui->wide_y3->setText(QString::number(wide_y[3]));
+		ui->wide_y4->setText(QString::number(wide_y[4]));
+		ui->wide_y5->setText(QString::number(wide_y[5]));
+		ui->wide_y6->setText(QString::number(wide_y[6]));
+		ui->wide_y7->setText(QString::number(wide_y[7]));
+		ui->wide_y8->setText(QString::number(wide_y[8]));
+		ui->wide_y9->setText(QString::number(wide_y[9]));
 		ui->layer_min->setText(QString::number(_layer_min));
 		ui->layer_max->setText(QString::number(_layer_max));
 	}
@@ -159,6 +207,26 @@ void ParamDialog::on_pushButton_4_clicked()
     dia[12] = ui->dia12->text().toInt();
     dia[13] = ui->dia13->text().toInt();
     dia[14] = ui->dia14->text().toInt();
+	wide_x[0] = ui->wide_x0->text().toInt();
+	wide_x[1] = ui->wide_x1->text().toInt();
+	wide_x[2] = ui->wide_x2->text().toInt();
+	wide_x[3] = ui->wide_x3->text().toInt();
+	wide_x[4] = ui->wide_x4->text().toInt();
+	wide_x[5] = ui->wide_x5->text().toInt();
+	wide_x[6] = ui->wide_x6->text().toInt();
+	wide_x[7] = ui->wide_x7->text().toInt();
+	wide_x[8] = ui->wide_x8->text().toInt();
+	wide_x[9] = ui->wide_x9->text().toInt();
+	wide_y[0] = ui->wide_y0->text().toInt();
+	wide_y[1] = ui->wide_y1->text().toInt();
+	wide_y[2] = ui->wide_y2->text().toInt();
+	wide_y[3] = ui->wide_y3->text().toInt();
+	wide_y[4] = ui->wide_y4->text().toInt();
+	wide_y[5] = ui->wide_y5->text().toInt();
+	wide_y[6] = ui->wide_y6->text().toInt();
+	wide_y[7] = ui->wide_y7->text().toInt();
+	wide_y[8] = ui->wide_y8->text().toInt();
+	wide_y[9] = ui->wide_y9->text().toInt();
 	layer_min = ui->layer_min->text().toInt();
 	layer_max = ui->layer_max->text().toInt();
 	parallel = ui->ml_parallel->isChecked();

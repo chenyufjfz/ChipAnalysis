@@ -1343,23 +1343,25 @@ bool ExtractParam::read_file(string filename)
                               int hole_th = (int)(*it)["hole_th"];
                               int heave_len = (int)(*it)["heave_len"];
                               int tangen_len = (int)(*it)["tangen_len"];
+							  int wire_th_weight = (int)(*it)["wire_th_weight"];
+							  int via_th_weight = (int)(*it)["via_th_weight"];
 
-                              if (enhance_opt > 255 || gray_i_th > 255 || gray_w_th > 255 || gray_i_clip > 255) {
-                                  qCritical("ParamItems file error, name=%s, enhance_opt=%d, i_th=%d, w_th=%d, gray_i_clip=%d",
-                                      name.c_str(), enhance_opt, gray_i_th, gray_w_th, gray_i_clip);
-                                  check_pass = false;
-                              }
+							  if (enhance_opt > 255 || gray_i_th > 255 || gray_w_th > 255 || gray_i_clip > 255) {
+								  qCritical("ParamItems file error, name=%s, enhance_opt=%d, i_th=%d, w_th=%d, gray_i_clip=%d",
+									  name.c_str(), enhance_opt, gray_i_th, gray_w_th, gray_i_clip);
+								  check_pass = false;
+							  }
 
-                              if (tangen_len > 255 || heave_len > 255 || hole_th > 65535 || gray_w_clip > 255) {
-                                  qCritical("ParamItems file error, name=%s, heave_len=%d, tangen_len=%d, hole_th=%d, gray_w_clip=%d",
-                                      name.c_str(), heave_len, tangen_len, hole_th, gray_w_clip);
-                                  check_pass = false;
-                              }
-                              param.pi[0] = layer;
-                              param.pi[1] = debug_opt << 24 | PP_IMAGE_ENHANCE2 << 16 | opidx_rv_mask << 4 | opidx_tp;
-                              param.pi[2] = gray_i_clip << 24 | gray_w_th << 16 | gray_i_th << 8 | enhance_opt;
-                              param.pi[3] = tangen_len << 24 | heave_len << 16 | hole_th;
-                              param.pi[4] = gray_w_clip;
+							  if (tangen_len > 255 || heave_len > 255 || hole_th > 65535 || gray_w_clip > 255) {
+								  qCritical("ParamItems file error, name=%s, heave_len=%d, tangen_len=%d, hole_th=%d, gray_w_clip=%d",
+									  name.c_str(), heave_len, tangen_len, hole_th, gray_w_clip);
+								  check_pass = false;
+							  }
+							  param.pi[0] = layer;
+							  param.pi[1] = debug_opt << 24 | PP_IMAGE_ENHANCE2 << 16 | opidx_rv_mask << 4 | opidx_tp;
+							  param.pi[2] = gray_i_clip << 24 | gray_w_th << 16 | gray_i_th << 8 | enhance_opt;
+							  param.pi[3] = tangen_len << 24 | heave_len << 16 | hole_th;
+							  param.pi[4] = via_th_weight << 16 | wire_th_weight << 8 | gray_w_clip;
                               break;
         }
         case ImageEnhance3:
