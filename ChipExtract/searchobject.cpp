@@ -694,7 +694,8 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
             unsigned short t = rsp_pkt->result[i].opt;
             obj.type = t >> 8;
             obj.type3 = t & 0xff;
-            obj.type2 = (obj.type == OBJ_LINE) ? LINE_WIRE_AUTO_EXTRACT : POINT_VIA_AUTO_EXTRACT;
+			obj.type2 = (obj.type == OBJ_PARA) ? PARA_PROGRESS :
+						(obj.type == OBJ_LINE) ? LINE_WIRE_AUTO_EXTRACT : POINT_VIA_AUTO_EXTRACT;
             obj.state = 0;
             obj.prob = rsp_pkt->result[i].prob;
             obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);
@@ -717,11 +718,12 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
 			obj.type = t >> 8;
 			obj.type3 = t & 0xff;
 			if (rsp_pkt->command == VWML_EXTRACT) {
-				obj.type2 = (obj.type == OBJ_POINT) ? POINT_VIA_AUTO_EXTRACT1 : LINE_WIRE_AUTO_EXTRACT1;
+				obj.type2 = (obj.type == OBJ_PARA) ? PARA_PROGRESS : 
+							(obj.type == OBJ_POINT) ? POINT_VIA_AUTO_EXTRACT1 : LINE_WIRE_AUTO_EXTRACT1;
 				obj.prob = rsp_pkt->result[i].prob;
 			}
 			else {
-				obj.type2 = obj.prob;
+				obj.type2 = (int)rsp_pkt->result[i].prob;
 				obj.prob = 1;
 			}
 			obj.state = 0;			

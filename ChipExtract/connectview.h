@@ -53,6 +53,7 @@ signals:
 	void del_vw_ml(string prj, string license, int layer, int d, int x, int y);
 	void extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int wmin_x, int wmin_y, int via_d, int param3, int param4, int opt);
     void mouse_change(QPoint pos, QString msg);
+	void notify_progress(float);
 
 public slots:
 	void server_connected();

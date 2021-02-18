@@ -30,11 +30,13 @@ class VWExtractService : public QObject {
 protected:
     VWExtract * vwe_single;
 	unsigned token;
+	unsigned req_command;
+	RakNet::SystemAddress cli_addr;
 
 public:
 	VWExtractService(unsigned _token, QObject *parent = 0);
 	~VWExtractService();
-
+	void notify(MarkObj * o);
 public slots:
 	void vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet);
 };

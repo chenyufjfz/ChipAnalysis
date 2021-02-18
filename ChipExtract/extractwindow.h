@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QThread>
 #include <QLabel>
+#include <QProgressBar>
 #include <QStackedWidget>
 #include "renderimage.h"
 #include "connectview.h"
@@ -26,6 +27,8 @@ private slots:
     void on_actionTrain_triggered();
     void on_actionExtract_triggered();
     void mouse_change(QPoint pos, QString msg);
+
+	void notify_progress(float progress);
 
     void on_actionLoad_Objects_triggered();
 
@@ -57,6 +60,7 @@ private slots:
 
 private:
     QLabel *status_label;
+	QProgressBar * pProgressBar;
     Ui::MainWindow *ui;
     vector<ElementObj*> warning_objs;
     int warning_idx;

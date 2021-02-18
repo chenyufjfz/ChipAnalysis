@@ -128,6 +128,12 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
     
 }
 
+void notify_service(void * para0, MarkObj * o)
+{
+	VWExtractService * service = (VWExtractService *) para0;
+	service->notify(o);
+}
+
 VWExtractService::VWExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
 	token = _token;
@@ -141,13 +147,36 @@ VWExtractService::~VWExtractService()
 	qInfo("VWExtract for token:%d is destroyed", token);
 }
 
+void VWExtractService::notify(MarkObj * o)
+{
+	unsigned rsp_len = sizeof(RspSearchPkt) + sizeof(Location);
+	RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
+	rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
+	rsp_pkt->command = req_command;
+	rsp_pkt->token = token;
+	rsp_pkt->rsp_search_num = 1;
+	Location * ploc = &(rsp_pkt->result[0]);
+	ploc[0].x0 = o->p0.x();
+	ploc[0].y0 = o->p0.y();
+	ploc[0].x1 = o->p1.x();
+	ploc[0].y1 = o->p1.y();
+	unsigned short t = o->type;
+	ploc[0].opt = t << 8 | o->type3;
+	ploc[0].prob = o->prob;
+	qInfo("send notify, type1=%d, type3=%d, prob=%f", (int)o->type, (int)o->type3, o->prob);
+	rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
+		RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
+	free(rsp_pkt);
+}
+
 void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet)
 {    
     ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
 	if (req_pkt->token != token)
 		return;
-	RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
-	
+	cli_addr = *((RakNet::SystemAddress *) p_cli_addr);	
+	req_command = req_pkt->command;
+
     switch (req_pkt->command) {
     case VW_EXTRACT:
         if (packet->length != sizeof(ReqSearchPkt) + sizeof(ReqSearchParam) * req_pkt->req_search_num)
@@ -191,6 +220,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
                 }
 			}
 			QScopedPointer< VWExtract > vwe(VWExtract::create_extract(0));
+			vwe->register_callback(this, notify_service);
             for (int l = 0; l<req_pkt->req_search_num; l++) {
 				if (pa[l].parami[0] >= 0) {
 					vwe->set_extract_param(anti_map_layer[pa[l].parami[0]], pa[l].parami[1], pa[l].parami[2], pa[l].parami[3], pa[l].parami[4],
@@ -216,24 +246,24 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 				vwe->extract(pic, search, objs);
 			
 #if DUMP_RESULT
-            FILE * fp;
-            int scale = 32768 / bk_img->getBlockWidth();
-            fp = fopen("result.txt", "w");
-            if (fp!=NULL) {
-                for (int i = 0; i < objs.size(); i++) {
-                    unsigned t = objs[i].type;
-                    if (t == OBJ_POINT) {
-                        fprintf(fp, "via, l=%d, x=%d, y=%d, prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale,
-                                objs[i].p0.y() / scale, objs[i].prob);
-                    }
-                    else {
-                        fprintf(fp, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d), prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale,
-                            objs[i].p1.x() / scale, objs[i].p1.y() / scale, objs[i].prob);
-                    }
-                    continue;
-                }
-                fclose(fp);
-            }
+			FILE * fp;
+			int scale = 32768 / bk_img->getBlockWidth();
+			fp = fopen("result.txt", "w");
+			if (fp != NULL) {
+				for (int i = 0; i < objs.size(); i++) {
+					unsigned t = objs[i].type;
+					if (t == OBJ_POINT) {
+						fprintf(fp, "via, l=%d, x=%d, y=%d, prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale,
+							objs[i].p0.y() / scale, objs[i].prob);
+					}
+					else {
+						fprintf(fp, "wire, l=%d, (x=%d,y=%d)->(x=%d,y=%d), prob=%f\n", map_layer[objs[i].type3], objs[i].p0.x() / scale, objs[i].p0.y() / scale,
+							objs[i].p1.x() / scale, objs[i].p1.y() / scale, objs[i].prob);
+					}
+					continue;
+				}
+				fclose(fp);
+			}
 #endif
             //send response
             unsigned rsp_len = sizeof(RspSearchPkt) + (unsigned) objs.size() * sizeof(Location);
@@ -320,6 +350,7 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 				CV_Assert(pic.back() != NULL);
 			}
 			QScopedPointer<VWExtract> vwe(VWExtract::create_extract(2));
+			vwe->register_callback(this, notify_service);
 			vector<MarkObj> objs;
 			if (req_pkt->command == VWML_TRAIN) {
 				qInfo("VWML train p0=%x,p1=%x,p2=%x,p3=%x,p4=%x,p5=%x,p6=%x,p7=%x,p8=%x",

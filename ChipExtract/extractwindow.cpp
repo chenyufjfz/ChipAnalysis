@@ -18,6 +18,13 @@ MainWindow::MainWindow(QWidget *parent) :
     status_label = new QLabel;
     status_label->setMinimumSize(200, 20);
     ui->statusBar->addWidget(status_label);
+
+	pProgressBar = new QProgressBar();
+	pProgressBar->setRange(0, 100);
+	pProgressBar->setValue(0);
+	pProgressBar->setMaximumSize(200, 20);
+	ui->statusBar->addPermanentWidget(pProgressBar);
+
 	monkey_test_id = 0;
     warning_idx = 0;
     setCentralWidget(&views);
@@ -116,6 +123,12 @@ void MainWindow::mouse_change(QPoint pos, QString msg)
     status_label->setText(s);
 }
 
+void MainWindow::notify_progress(float pos)
+{
+	pProgressBar->setValue(100 * pos);
+	pProgressBar->repaint();
+}
+
 void MainWindow::on_actionClear_Objects_triggered()
 {
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
@@ -211,6 +224,7 @@ void MainWindow::on_actionNew_View_triggered()
 	ConnectView * connect_view = new ConnectView((const char *)fileName.toLocal8Bit(), this);
 
     connect(connect_view, SIGNAL(mouse_change(QPoint, QString)), this, SLOT(mouse_change(QPoint, QString)));
+	connect(connect_view, SIGNAL(notify_progress(float)), this, SLOT(notify_progress(float)));
     views.addWidget(connect_view);
 	views.setCurrentWidget(connect_view);
 	connect_view->setFocus();

@@ -250,10 +250,14 @@ void ConnectView::draw_element(QPainter &painter)
 	for (unsigned i = 0; i < rst.size(); i++) {
 		if (rst[i]->type3 == bk_layer) {
 			painter.setPen(QPen(Qt::green, 2));
+			QPoint p0(width() * (rst[i]->p0.x() - view_rect.left()) / view_rect.width(),
+				height()* (rst[i]->p0.y() - view_rect.top()) / view_rect.height());
+			QPoint p1(width() * (rst[i]->p1.x() - view_rect.left()) / view_rect.width(),
+				height()* (rst[i]->p1.y() - view_rect.top()) / view_rect.height());
 			if (rst[i]->type2 == POINT_WIRE_INSU)
-				painter.drawLine(rst[i]->p0, rst[i]->p1);
+				painter.drawLine(p0, p1);
 			else
-				painter.drawRect(rst[i]->p0.x() - 1, rst[i]->p0.y() - 1, 3, 3);
+				painter.drawRect(p0.x() - 1, p0.y() - 1, 3, 3);
 		}
 	}
 
@@ -747,6 +751,7 @@ void ConnectView::train_vw_ml_done(QSharedPointer<SearchResults> prst)
 	for (int i = 0; i < prst->objs.size(); i++) {
 		ElementObj obj(prst->objs[i]);
 		obj.p0 = pcst->bu2pixel(obj.p0);
+		obj.p1 = pcst->bu2pixel(obj.p1);
 		odb.add_object(obj);
 	}
 	update();
@@ -765,6 +770,8 @@ void ConnectView::get_train_vw_ml_done(QSharedPointer<SearchResults> prst)
 
 void ConnectView::extract_ml_done(QSharedPointer<SearchResults> prst)
 {
+	if (!prst->objs.empty() && prst->objs[0].type == OBJ_PARA)
+		notify_progress(prst->objs[0].prob);
 	update();
 }
 
