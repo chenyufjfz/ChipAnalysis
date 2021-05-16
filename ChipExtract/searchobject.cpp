@@ -288,6 +288,10 @@ void SearchObject::train_cell(string prj, string , unsigned char l0, unsigned ch
 void SearchObject::extract_cell(string prj, string license, unsigned char l0, unsigned char l1, unsigned char l2, unsigned char l3,
      QSharedPointer<SearchRects> prect, float param1, float param2, float param3)
 {
+	if (prect->rects.empty() || prect->dir.empty()) {
+		qCritical("extract_cell rect empty");
+		return;
+	}
 	if (prj.length() + license.length()  > PRJ_NAME_LIMIT) {
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
@@ -481,9 +485,9 @@ void SearchObject::train_wire_ml(string prj, string license, int layer, int labe
 		qCritical("prj name too long:%s", prj.c_str());
 		return;
 	}
-	wmin_x = max(wmin_x, 100);
-	wmin_x = max(wmin_x, 100);
-	via_d = max(via_d, 100);
+	wmin_x = min(wmin_x, 100);
+	wmin_y = min(wmin_y, 100);
+	via_d = min(via_d, 100);
 	if (get_host_name(prj) != prj_host || token == 0) {
 		prj_host = get_host_name(prj);
 		req_queue.clear();
@@ -578,7 +582,7 @@ void SearchObject::del_vw_ml(string prj, string license, int layer, int d, int x
 	process_req_queue();
 }
 
-void SearchObject::extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int wmin_x, int wmin_y, int via_d, int param3, int param4, int opt)
+void SearchObject::extract_ml(string prj, string license, int layer_min, int layer_max, QPolygon area, int wmin_x, int wmin_y, int via_d, int force_via, int force_wire, int opt)
 {
 	if (prj.length() + license.length() > PRJ_NAME_LIMIT) {
 		qCritical("prj name too long:%s", prj.c_str());
@@ -590,6 +594,10 @@ void SearchObject::extract_ml(string prj, string license, int layer_min, int lay
 		if (try_server(true) < 0)
 			return;
 	}
+	wmin_x = max(0, min(wmin_x, 100));
+	wmin_y = max(0, min(wmin_y, 100));
+	via_d = max(0, min(via_d, 100));
+    force_via = max(-10, min(force_via, 10));
 	QRect r = area.boundingRect();
 	ReqSearch rs;
 	rs.req_len = sizeof(ReqSearchPkt)+sizeof(ReqSearchParam);
@@ -600,9 +608,9 @@ void SearchObject::extract_ml(string prj, string license, int layer_min, int lay
 	rs.req_pkt->req_search_num = 1;
 	rs.req_pkt->params[0].parami[0] = layer_max << 8 | layer_min;
 	rs.req_pkt->params[0].parami[1] = POINT_WIRE_INSU << 8 | OBJ_POINT;
-	rs.req_pkt->params[0].parami[2] = wmin_y << 16 | wmin_x << 8 | via_d;
-	rs.req_pkt->params[0].parami[3] = param3;
-	rs.req_pkt->params[0].parami[4] = param4;
+    rs.req_pkt->params[0].parami[2] = force_via << 24 | wmin_y << 16 | wmin_x << 8 | via_d;
+    rs.req_pkt->params[0].parami[3] = force_wire << 24;
+	rs.req_pkt->params[0].parami[4] = 0;
 	rs.req_pkt->params[0].parami[5] = 0;
 	rs.req_pkt->params[0].parami[6] = 0;
 	rs.req_pkt->params[0].loc[0].x0 = r.left();
@@ -610,8 +618,8 @@ void SearchObject::extract_ml(string prj, string license, int layer_min, int lay
 	rs.req_pkt->params[0].loc[0].x1 = r.right();
 	rs.req_pkt->params[0].loc[0].y1 = r.bottom();
 	rs.req_pkt->params[0].loc[0].opt = opt;
-	qInfo("extract_ml %s l=%d,%d, lt=(%d,%d), rb=(%d,%d), wmin_x=%d wmin_y=%d p3=%x p4=%x", prj.c_str(), layer_min, layer_max,
-		r.left(), r.top(), r.right(), r.bottom(), wmin_x, wmin_y, param3, param4);
+    qInfo("extract_ml %s l=%d,%d, lt=(%d,%d), rb=(%d,%d), wmin_x=%d wmin_y=%d, via_d=%d, fv=%d, fw=%x, opt=%x", prj.c_str(), layer_min, layer_max,
+        r.left(), r.top(), r.right(), r.bottom(), wmin_x, wmin_y, via_d, force_via, force_wire, opt);
 	req_queue.push_back(rs);
 	process_req_queue();
 }
@@ -669,9 +677,10 @@ void SearchObject::search_packet_arrive(QSharedPointer<RakNet::Packet> packet)
     case CELL_EXTRACT:
         for (unsigned i = 0; i < rsp_pkt->rsp_search_num; i++) {
             MarkObj obj;
-            obj.type = OBJ_AREA;
-            obj.type2 = AREA_CELL;
-            obj.type3 = rsp_pkt->result[i].opt;
+			unsigned short t = rsp_pkt->result[i].opt;
+			obj.type = t >> 8;
+			obj.type2 = (obj.type == OBJ_PARA) ? PARA_PROGRESS : AREA_CELL;
+            obj.type3 = t & 0xff;
             obj.state = 0;
             obj.prob = rsp_pkt->result[i].prob;
             obj.p0 = QPoint(rsp_pkt->result[i].x0, rsp_pkt->result[i].y0);

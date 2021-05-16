@@ -32,6 +32,13 @@ static void decouple_prj_license(unsigned char * str, string & prj, string & lic
     qInfo("prj=%s, license=%s", prj.c_str(), license.c_str());
 }
 
+void notify_cell_service(void * para0, MarkObj * o)
+{
+	CellExtractService * service = (CellExtractService *)para0;
+	service->notify(o);
+}
+
+
 CellExtractService::CellExtractService(unsigned _token, QObject *parent) : QObject(parent)
 {
 	token = _token;
@@ -42,12 +49,35 @@ CellExtractService::~CellExtractService()
 {
 	qInfo("CellExtractfor token:%d is destroyed", token);
 }
+
+void CellExtractService::notify(MarkObj * o)
+{
+	unsigned rsp_len = sizeof(RspSearchPkt) + sizeof(Location);
+	RspSearchPkt * rsp_pkt = (RspSearchPkt *)malloc(rsp_len);
+	rsp_pkt->typeId = ID_RESPONSE_OBJ_SEARCH;
+	rsp_pkt->command = CELL_EXTRACT;
+	rsp_pkt->token = token;
+	rsp_pkt->rsp_search_num = 1;
+	Location * ploc = &(rsp_pkt->result[0]);
+	ploc[0].x0 = o->p0.x();
+	ploc[0].y0 = o->p0.y();
+	ploc[0].x1 = o->p1.x();
+	ploc[0].y1 = o->p1.y();
+	unsigned short t = o->type;
+	ploc[0].opt = t << 8 | o->type3;
+	ploc[0].prob = o->prob;
+	qInfo("send cell notify, type1=%d, type3=%d, prob=%f", (int)o->type, (int)o->type3, o->prob);
+	rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
+		RELIABLE_ORDERED, ELEMENT_STREAM, cli_addr, false);
+	free(rsp_pkt);
+}
+
 void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet)
 {	
     ReqSearchPkt * req_pkt = (ReqSearchPkt *) packet->data;
 	if (req_pkt->token != token)
 		return;
-	RakNet::SystemAddress cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
+	cli_addr = *((RakNet::SystemAddress *) p_cli_addr);
 
     switch (req_pkt->command) {
         case CELL_TRAIN:
@@ -75,6 +105,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 			}
 
 			QScopedPointer< CellExtract > ce(new CellExtract);
+			ce->register_callback(this, notify_cell_service);
 			ce->set_train_param(pa->parami[2], pa->parami[3], pa->parami[4], pa->parami[5], pa->parami[6],
 				pa->parami[7], pa->parami[8], pa->parami[9], pa->parami[10], pa->paramf);
 			MarkObj obj;
@@ -115,7 +146,7 @@ void CellExtractService::cell_extract_req(void * p_cli_addr, QSharedPointer<BkIm
 						ploc[j].y0 = objs[j].p0.y();
 						ploc[j].x1 = objs[j].p1.x();
 						ploc[j].y1 = objs[j].p1.y();
-						ploc[j].opt = objs[j].type3;
+						ploc[j].opt = OBJ_AREA << 8 | objs[j].type3;
                         ploc[j].prob = objs[j].prob;                        
 					}
 					rak_peer->Send((char*)rsp_pkt, rsp_len, MEDIUM_PRIORITY,
@@ -379,8 +410,8 @@ void VWExtractService::vw_extract_req(void * p_cli_addr, QSharedPointer<BkImgInt
 					pa->parami[6], pa->parami[7], pa->parami[8], pa->paramf);
 				vector<SearchArea> areas;
 				for (int j = 0; j < req_pkt->req_search_num; j++) {
-					qInfo("VWML extract (%d,%d)_(%d,%d)", pa->loc[j].x0, pa->loc[j].y0,
-						pa->loc[j].x1, pa->loc[j].y1);
+                    qInfo("VWML extract (%d,%d)_(%d,%d), opt=%x", pa->loc[j].x0, pa->loc[j].y0,
+                        pa->loc[j].x1, pa->loc[j].y1,  pa->loc[j].opt);
 					areas.push_back(SearchArea(QRect(pa->loc[j].x0, pa->loc[j].y0,
 						pa->loc[j].x1 - pa->loc[j].x0 + 1, pa->loc[j].y1 - pa->loc[j].y0 + 1), pa->loc[j].opt));
 				}

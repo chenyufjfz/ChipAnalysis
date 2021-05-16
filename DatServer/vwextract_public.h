@@ -98,6 +98,8 @@ void print_stack(void);
 //search opt
 #define OPT_PARALLEL_SEARCH		1
 #define OPT_POLYGON_SEARCH		2
+#define OPT_ONLY_WIRE_SEARCH	4
+#define OPT_ONLY_VIA_SEARCH		8
 
 #define FEATURE_ROW				3
 #define POINT_TOT_PROB			100
@@ -173,6 +175,7 @@ void get_line_pts(Point pt1, Point pt2, vector <Point> & pts);
 void get_line_pts2(Point pt1, Point pt2, vector <Point> & pts);
 bool intersect_line(Point p0, int dir0, Point p1, int dir1, Point & pis);
 float pt2line_distance(Point p1, Point p0, int dir);
+void compute_grad_fast(const Mat & img, Mat & grad, int scale = 27);
 
 /*
 Compute integrate and line integral
@@ -457,6 +460,77 @@ public:
 
 	virtual ~VWExtract() {
 
+	}
+};
+
+class EdgeRouter {
+protected:
+	unsigned path_mask[4096];
+	void put_path(int edge_grad, int prev_loc, int prev_grad, int next_loc, int next_grad, int coef) {
+		path_mask[get_path_idx(edge_grad, prev_loc, prev_grad, next_loc)] |= coef << (4 * next_grad);
+	}
+	int t(int dir);
+	int m(int dir) {
+		switch (dir) {
+		case DIR_DOWN:
+			return DIR_DOWN;
+		case DIR_LEFT:
+			return DIR_RIGHT;
+		case DIR_UP:
+			return DIR_UP;
+		case DIR_RIGHT:
+			return DIR_LEFT;
+		case DIR_DOWNLEFT:
+			return DIR_DOWNRIGHT;
+		case DIR_UPLEFT:
+			return DIR_UPRIGHT;
+		case DIR_UPRIGHT:
+			return DIR_UPLEFT;
+		case DIR_DOWNRIGHT:
+			return DIR_DOWNLEFT;
+		default:
+			CV_Assert(0);
+		}
+		return 0;
+	}
+public:
+	int get_path_idx(int edge_grad, int prev_loc, int prev_grad, int next_loc) {
+		return edge_grad << 9 | prev_loc << 6 | prev_grad << 3 | next_loc;
+	}
+	//return path penalty coefficient
+	float path_ok(int edge_grad, int prev_loc, int prev_grad, int next_loc, int next_grad) {
+		int a = (path_mask[get_path_idx(edge_grad, prev_loc, prev_grad, next_loc)] >> (4 * next_grad)) & 15;
+		return a / 8.0;
+	}
+	EdgeRouter(uchar path0[][10], int path0_size) {
+		memset(path_mask, 0, sizeof(path_mask));
+		for (int i = 0; i < path0_size; i++) {
+			put_path(path0[i][0], path0[i][1], path0[i][2], path0[i][3], path0[i][4], path0[i][7]);
+			put_path(path0[i][0], path0[i][1], path0[i][2], path0[i][3], path0[i][5], path0[i][8]);
+			put_path(path0[i][0], path0[i][1], path0[i][2], path0[i][3], path0[i][6], path0[i][9]);
+			put_path(t(path0[i][0]), t(path0[i][1]), t(path0[i][2]), t(path0[i][3]), t(path0[i][4]), path0[i][7]);//rotate
+			put_path(t(path0[i][0]), t(path0[i][1]), t(path0[i][2]), t(path0[i][3]), t(path0[i][5]), path0[i][8]);
+			put_path(t(path0[i][0]), t(path0[i][1]), t(path0[i][2]), t(path0[i][3]), t(path0[i][6]), path0[i][9]);
+			put_path(t(t(path0[i][0])), t(t(path0[i][1])), t(t(path0[i][2])), t(t(path0[i][3])), t(t(path0[i][4])), path0[i][7]);
+			put_path(t(t(path0[i][0])), t(t(path0[i][1])), t(t(path0[i][2])), t(t(path0[i][3])), t(t(path0[i][5])), path0[i][8]);
+			put_path(t(t(path0[i][0])), t(t(path0[i][1])), t(t(path0[i][2])), t(t(path0[i][3])), t(t(path0[i][6])), path0[i][9]);
+			put_path(t(t(t(path0[i][0]))), t(t(t(path0[i][1]))), t(t(t(path0[i][2]))), t(t(t(path0[i][3]))), t(t(t(path0[i][4]))), path0[i][7]);
+			put_path(t(t(t(path0[i][0]))), t(t(t(path0[i][1]))), t(t(t(path0[i][2]))), t(t(t(path0[i][3]))), t(t(t(path0[i][5]))), path0[i][8]);
+			put_path(t(t(t(path0[i][0]))), t(t(t(path0[i][1]))), t(t(t(path0[i][2]))), t(t(t(path0[i][3]))), t(t(t(path0[i][6]))), path0[i][9]);
+
+			put_path(m(path0[i][0]), m(path0[i][1]), m(path0[i][2]), m(path0[i][3]), m(path0[i][4]), path0[i][7]);//lr mirror
+			put_path(m(path0[i][0]), m(path0[i][1]), m(path0[i][2]), m(path0[i][3]), m(path0[i][5]), path0[i][8]);
+			put_path(m(path0[i][0]), m(path0[i][1]), m(path0[i][2]), m(path0[i][3]), m(path0[i][6]), path0[i][9]);
+			put_path(t(m(path0[i][0])), t(m(path0[i][1])), t(m(path0[i][2])), t(m(path0[i][3])), t(m(path0[i][4])), path0[i][7]);
+			put_path(t(m(path0[i][0])), t(m(path0[i][1])), t(m(path0[i][2])), t(m(path0[i][3])), t(m(path0[i][5])), path0[i][8]);
+			put_path(t(m(path0[i][0])), t(m(path0[i][1])), t(m(path0[i][2])), t(m(path0[i][3])), t(m(path0[i][6])), path0[i][9]);
+			put_path(t(t(m(path0[i][0]))), t(t(m(path0[i][1]))), t(t(m(path0[i][2]))), t(t(m(path0[i][3]))), t(t(m(path0[i][4]))), path0[i][7]);
+			put_path(t(t(m(path0[i][0]))), t(t(m(path0[i][1]))), t(t(m(path0[i][2]))), t(t(m(path0[i][3]))), t(t(m(path0[i][5]))), path0[i][8]);
+			put_path(t(t(m(path0[i][0]))), t(t(m(path0[i][1]))), t(t(m(path0[i][2]))), t(t(m(path0[i][3]))), t(t(m(path0[i][6]))), path0[i][9]);
+			put_path(t(t(t(m(path0[i][0])))), t(t(t(m(path0[i][1])))), t(t(t(m(path0[i][2])))), t(t(t(m(path0[i][3])))), t(t(t(m(path0[i][4])))), path0[i][7]);
+			put_path(t(t(t(m(path0[i][0])))), t(t(t(m(path0[i][1])))), t(t(t(m(path0[i][2])))), t(t(t(m(path0[i][3])))), t(t(t(m(path0[i][5])))), path0[i][8]);
+			put_path(t(t(t(m(path0[i][0])))), t(t(t(m(path0[i][1])))), t(t(t(m(path0[i][2])))), t(t(t(m(path0[i][3])))), t(t(t(m(path0[i][6])))), path0[i][9]);
+		}
 	}
 };
 

@@ -593,10 +593,22 @@ struct SearchResult {
     }
 };
 
+static double compute_area(list<SearchArea> & area)
+{
+	double s = 0;
+	for (list<SearchArea>::iterator pa = area.begin(); pa != area.end(); pa++)
+		s += pa->rect.width() * pa->rect.height();
+	return s;
+}
+
 int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<SearchArea> & area_, vector<MarkObj> & obj_sets)
 {
 	if (cell.empty()) {
 		qCritical("Cell must be traininged before extract");
+		return -1;
+	}
+	if (area_.empty()) {
+		qCritical("Cell extract with empty area");
 		return -1;
 	}
     list<SearchArea> area;
@@ -628,8 +640,15 @@ int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<S
         area.sort(comp_y);    
     else
         area.sort(comp_x);
-
-
+	if (notify) {
+		MarkObj o;
+		o.type = OBJ_PARA;
+		o.type2 = PARA_PROGRESS;
+		o.prob = 0.01f;
+		notify(notify_para0, &o);
+	}
+	double total_area = compute_area(area);
+	double left_area = total_area;
     vector<SearchArea> nsech;
     list<SearchResult> result;
     vector<unsigned> bins, th;
@@ -660,6 +679,10 @@ int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<S
             else
                 pa++;
         }
+		double donearea = total_area - left_area;
+		double ongoarea = left_area;
+		left_area = compute_area(area);
+		ongoarea -= left_area;
 
         //Search from left to right, prepare initial ig
         int fb_y = (cr.bottom() >> 15) - (cr.y() >> 15) + 1;
@@ -768,6 +791,17 @@ int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<S
                         p_ig[x] = p_ign[xn] + p_ig[x0 - 1];
                 }
             }
+
+			if (notify && (xx - (cr.x() >> 15)) % 2 == 0) {
+				double progress = (double) (xx + 1 - (cr.x() >> 15)) / (cr.width() >> 15);
+				progress = min(progress, 1.0);
+				MarkObj o;
+				o.type = OBJ_PARA;
+				o.type2 = PARA_PROGRESS;
+				o.prob = (donearea + ongoarea * progress) / total_area;
+				o.prob = max(0.01f, min(o.prob, 0.99f));
+				notify(notify_para0, &o);
+			}
         }
 
         //pick best solution from search result
@@ -794,5 +828,12 @@ int CellExtract::extract(vector<ICLayerWrInterface *> & ic_layer, const vector<S
                 pr->x % ic_layer[0]->getBlockWidth(), pr->y %ic_layer[0]->getBlockWidth(), pr->dir, pr->diff);
         }
     }
+	if (notify) {
+		MarkObj o;
+		o.type = OBJ_PARA;
+		o.type2 = PARA_PROGRESS;
+		o.prob = 1;
+		notify(notify_para0, &o);
+	}
     return 0;
 }

@@ -4,11 +4,10 @@
 #include <stdio.h>
 #include <QDateTime>
 
-
+#define QMSG_FLUSH 1
 #ifdef Q_OS_WIN
 #include <Windows.h>
 #include <Dbghelp.h>
-#define QMSG_FLUSH 1
 
 void print_stack(void)
 {
@@ -16,7 +15,7 @@ void print_stack(void)
     void         * stack[100];
     unsigned short frames;
 	SYMBOL_INFO  * symbol;
-    HANDLE         process;
+	HANDLE         process;
 
     process = GetCurrentProcess();
 
@@ -34,7 +33,7 @@ void print_stack(void)
         qInfo("%i: %s ", frames - i - 1, symbol->Name);
     }
 
-    free(symbol);
+	free(symbol);
 }
 #else
 #include <execinfo.h>
@@ -62,16 +61,29 @@ void print_stack(void) {
 }
 #endif
 static FILE * fp = NULL;
+static int fp_idx = 0;
+static int fp_write = 0;
+#define LOG_FILE_SIZE 102400000
 
 //Debug out format <$level>[$dnum,$module] [$time] [$func] $msg
 //Release output format <$level>[$time] $msg
 void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
     if (fp==NULL) {
-        fp = fopen("server_log.txt", "wt");
+        fp = fopen("server_log0.txt", "wt");
         if (fp==NULL)
             exit(-1);
-    }    
+    }
+    if (fp_write > LOG_FILE_SIZE) {
+        fclose(fp);
+        fp_idx = (fp_idx + 1) % 2;
+        fp_write = 0;
+        char fname[100];
+        qsnprintf(fname, 100, "server_log%d.txt", fp_idx);
+        fp = fopen(fname, "wt");
+        if (fp==NULL)
+            exit(-1);
+    }
 
     QTime datetime;
     datetime = QTime::currentTime();
@@ -84,27 +96,27 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
             unsigned thread_id = quintptr(QThread::currentThreadId());
             switch (type) {
             case QtDebugMsg:
-                fprintf(fp, "<D>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
+                fp_write += fprintf(fp, "<D>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
     #if QMSG_FLUSH
                 fflush(fp);
     #endif
                 break;
             case QtInfoMsg:
-                fprintf(fp, "<I>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
+                fp_write += fprintf(fp, "<I>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
     #if QMSG_FLUSH
                 fflush(fp);
     #endif
                 break;
             case QtWarningMsg:
-                fprintf(fp, "<W>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
+                fp_write += fprintf(fp, "<W>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
                 fflush(fp);
                 break;
             case QtCriticalMsg:
-                fprintf(fp, "<E>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
+                fp_write += fprintf(fp, "<E>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
                 fflush(fp);
                 break;
             case QtFatalMsg:
-                fprintf(fp, "<F>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
+                fp_write += fprintf(fp, "<F>[%s] [%d] %s\n", qPrintable(str_dt), thread_id, qPrintable(msg));
                 fclose(fp);
                 exit(-1);
             }
@@ -142,20 +154,20 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
 
     switch (type) {
     case QtDebugMsg:
-        fprintf(fp, "<D>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
+        fp_write += fprintf(fp, "<D>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
         break;
     case QtInfoMsg:
-        fprintf(fp, "<I>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
+        fp_write += fprintf(fp, "<I>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
         break;
     case QtWarningMsg:
-        fprintf(fp, "<W>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
+        fp_write += fprintf(fp, "<W>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
         break;
     case QtCriticalMsg:
-        fprintf(fp, "<E>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
+        fp_write += fprintf(fp, "<E>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
         fflush(fp);
         break;
     case QtFatalMsg:
-        fprintf(fp, "<F>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
+        fp_write += fprintf(fp, "<F>[%d,%s] [%s] [%s] %s\n", context.line, file, qPrintable(str_dt), func, qPrintable(msg));
         fclose(fp);
         exit(-1);
     }

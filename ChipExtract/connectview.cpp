@@ -37,6 +37,9 @@ ConnectView::ConnectView(const char * prj_name, QWidget *parent) : QWidget(paren
 	dia.resize(15, 10);
 	wide_x.resize(10, 5);
 	wide_y.resize(10, 5);
+    via_d.resize(10, 9);
+    force.resize(10, 0);
+    force_wire.resize(10, 0);
 #if 0
     ElementObj obj;
     obj.type = OBJ_AREA;
@@ -85,16 +88,22 @@ void ConnectView::set_dia(const vector<int> & dia_)
 	dia = dia_;
 }
 
-void ConnectView::get_wide_xy(vector<int> & wide_x_, vector<int> & wide_y_)
+void ConnectView::get_wide_xy(vector<int> & wide_x_, vector<int> & wide_y_, vector<int> & via_d_, vector<int> & force_, vector<int> & force_wire_)
 {
 	wide_x_ = wide_x;
 	wide_y_ = wide_y;
+	via_d_ = via_d;
+	force_ = force;
+    force_wire_ = force_wire;
 }
 
-void ConnectView::set_wide_xy(const vector<int> & wide_x_, const vector<int> & wide_y_)
+void ConnectView::set_wide_xy(const vector<int> & wide_x_, const vector<int> & wide_y_, vector<int> & via_d_, vector<int> & force_, vector<int> & force_wire_)
 {
 	wide_x = wide_x_;
 	wide_y = wide_y_;
+	via_d = via_d_;
+	force = force_;
+    force_wire = force_wire_;
 }
 
 void ConnectView::draw_obj(ElementObj & obj, QPainter &painter)
@@ -713,6 +722,11 @@ void ConnectView::render_bkimg_done(const unsigned char layer, const QRect rect,
 
 void ConnectView::extract_cell_done(QSharedPointer<SearchResults> prst)
 {
+	if (!prst->objs.empty() && prst->objs[0].type == OBJ_PARA) {
+		notify_progress(prst->objs[0].prob);
+		update();
+		return;
+	}
     for (int i = 0; i < prst->objs.size(); i++) {        
         ElementObj obj(prst->objs[i]);
 		obj.p0 = pcst->bu2pixel(obj.p0);
@@ -737,6 +751,11 @@ void ConnectView::extract_single_wire_done(QSharedPointer<SearchResults> prst)
 
 void ConnectView::extract_wire_via_done(QSharedPointer<SearchResults> prst)
 {
+	if (!prst->objs.empty() && prst->objs[0].type == OBJ_PARA) {
+		notify_progress(prst->objs[0].prob);
+		update();
+		return;
+	}
     for (int i = 0; i < prst->objs.size(); i++) {
         ElementObj obj(prst->objs[i]);
 		obj.p0 = pcst->bu2pixel(obj.p0);
@@ -876,7 +895,10 @@ void ConnectView::vwml_extract(int layer, int opt)
 	QPoint p0 = pcst->pixel2bu(er[0]->p0);
 	QPoint p1 = pcst->pixel2bu(er[0]->p1);
 	QRect r(p0, p1);
-	emit extract_ml(prj_file, license, layer, layer, QPolygon(r), wide_x[layer], wide_y[layer], 6, 0, 0, opt);
+    if (opt & SEARCH_VIA_ONLY && opt & SEARCH_WIRE_ONLY) {
+        opt &= ~SEARCH_VIA_ONLY & ~SEARCH_WIRE_ONLY;
+    }
+    emit extract_ml(prj_file, license, layer, layer, QPolygon(r), wide_x[layer], wide_y[layer], via_d[layer], force[layer], force_wire[layer], opt);
 }
 
 /*

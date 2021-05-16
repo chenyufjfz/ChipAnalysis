@@ -8,7 +8,10 @@
 #include "searchobject.h"
 #include "objectdb.h"
 
-#define SEARCH_PARALLEL 1
+#define SEARCH_PARALLEL     1
+#define SEARCH_POLYGEN      2
+#define SEARCH_WIRE_ONLY    4
+#define SEARCH_VIA_ONLY     8
 
 enum {
     CREATE_NEW_OBJ,
@@ -90,8 +93,8 @@ public:
 	int get_current_layer();
 	void get_dia(vector<int> & dia_);
 	void set_dia(const vector<int> & dia_);
-	void get_wide_xy(vector<int> & wide_x_, vector<int> & wide_y_);
-	void set_wide_xy(const vector<int> & wide_x_, const vector<int> & wide_y_);
+    void get_wide_xy(vector<int> & wide_x_, vector<int> & wide_y_, vector<int> & via_d_, vector<int> & force_, vector<int> & force_wire_);
+    void set_wide_xy(const vector<int> & wide_x_, const vector<int> & wide_y_, vector<int> & via_d_, vector<int> & force_, vector<int> & force_wire_);
 
 protected:
     void draw_obj(ElementObj & obj, QPainter &painter);
@@ -104,7 +107,7 @@ protected:
 
 protected:
 	DisplayState ds;
-	vector<int> dia, wide_x, wide_y;
+    vector<int> dia, wide_x, wide_y, via_d, force, force_wire;
     bool hide_element;
     MarkState ms;
 	QImage render_img, render_img_2;

@@ -16,10 +16,12 @@ class CellExtractService : public QObject {
     Q_OBJECT
 protected:
 	unsigned token;
+	RakNet::SystemAddress cli_addr;
 
 public:
 	CellExtractService(unsigned _token, QObject *parent = 0);
 	~CellExtractService();
+	void notify(MarkObj * o);
 
 public slots:
 	void cell_extract_req(void * p_cli_addr, QSharedPointer<BkImgInterface> bk_img, QSharedPointer<RakNet::Packet> packet);

@@ -42,11 +42,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_actionTrain_triggered()
 {
-	vector<int> dia, wide_x, wide_y;
+    vector<int> dia, wide_x, wide_y, via_d, force, force_wire;
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 	Q_ASSERT(connect_view != NULL);
 	connect_view->get_dia(dia);
-    ParamDialog param_dlg(dia, wide_x, wide_y, -1, -1);
+    ParamDialog param_dlg(dia, wide_x, wide_y, via_d, force, force_wire, -1, -1);
     if (param_dlg.exec() == QDialog::Accepted) {
         if (param_dlg.choose == 1)
             connect_view->cell_train(0, 0, 0, 0, param_dlg.cell_param1,
@@ -61,12 +61,12 @@ void MainWindow::on_actionTrain_triggered()
 
 void MainWindow::on_actionExtract_triggered()
 {
-	vector<int> dia, wide_x, wide_y;
+    vector<int> dia, wide_x, wide_y, via_d, force, force_wire;
 	ConnectView * connect_view = qobject_cast<ConnectView *> (views.currentWidget());
 	Q_ASSERT(connect_view != NULL);
-	connect_view->get_wide_xy(wide_x, wide_y);
+    connect_view->get_wide_xy(wide_x, wide_y, via_d, force, force_wire);
 	int layer = connect_view->get_current_layer();
-	ParamDialog param_dlg(dia, wide_x, wide_y, layer, layer);
+    ParamDialog param_dlg(dia, wide_x, wide_y, via_d, force, force_wire, layer, layer);
     if (param_dlg.exec() == QDialog::Accepted) {		
         if (param_dlg.choose == 1)
             connect_view->cell_extract(0, 0, 0, 0, param_dlg.cell_param1,
@@ -83,8 +83,18 @@ void MainWindow::on_actionExtract_triggered()
 				wide_x[i] = param_dlg.wide_x[i];
 			for (int i = 0; i < (int)min(sizeof(param_dlg.wide_y) / sizeof(int), wide_y.size()); i++)
 				wide_y[i] = param_dlg.wide_y[i];
-			connect_view->set_wide_xy(wide_x, wide_y);
-			connect_view->vwml_extract(param_dlg.layer_min, param_dlg.parallel ? SEARCH_PARALLEL : 0);
+            for (int i = 0; i < (int)min(sizeof(param_dlg.via_d) / sizeof(int), via_d.size()); i++)
+                via_d[i] = param_dlg.via_d[i];
+            for (int i = 0; i < (int)min(sizeof(param_dlg.force) / sizeof(int), force.size()); i++)
+                force[i] = param_dlg.force[i];
+            for (int i = 0; i < (int)min(sizeof(param_dlg.force_wire) / sizeof(int), force_wire.size()); i++)
+                force_wire[i] = param_dlg.force_wire[i];
+            connect_view->set_wide_xy(wide_x, wide_y, via_d, force, force_wire);
+            int opt = 0;
+            opt |= param_dlg.parallel ? SEARCH_PARALLEL : 0;
+            opt |= param_dlg.via_only ? SEARCH_VIA_ONLY : 0;
+            opt |= param_dlg.wire_only ? SEARCH_WIRE_ONLY : 0;
+            connect_view->vwml_extract(param_dlg.layer_min, opt);
 		}
     }
 
