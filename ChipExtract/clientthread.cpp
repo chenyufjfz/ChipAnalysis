@@ -59,7 +59,7 @@ int ClientThread::connect_to_server(string server_name, RakNet::SystemAddress & 
 		}
 		else {
 			iter->second.active_num++;
-			qInfo("Use exist connect to %s, addr=%s, active=%d", server_name.c_str(), server_addr.ToString(), iter->second.active_num);
+			qDebug("Use exist connect to %s, addr=%s, active=%d", server_name.c_str(), server_addr.ToString(), iter->second.active_num);
 		}
 		if (rst == RakNet::ALREADY_CONNECTED_TO_ENDPOINT)
 			return CONNECTED;
@@ -68,7 +68,7 @@ int ClientThread::connect_to_server(string server_name, RakNet::SystemAddress & 
 
 	case RakNet::CONNECTION_ATTEMPT_STARTED:
 		if (iter == active_conect.end()) { //Not found
-			qInfo("New connect to %s, addr=%s", server_name.c_str(), server_addr.ToString());
+			qDebug("New connect to %s, addr=%s", server_name.c_str(), server_addr.ToString());
 			ActiveConect new_active_connect;
 			new_active_connect.active_num = 1;
 			active_conect[server_addr] = new_active_connect;
@@ -97,7 +97,7 @@ void ClientThread::disconnect_server(RakNet::SystemAddress & server_addr)
 			qCritical("Disconnect %s, but activer=0, check connect/disconnect mismatch", server_addr.ToString());
 		else {
 			iter->second.active_num--;
-			qInfo("reduce server %s active num=%d", server_addr.ToString(), iter->second.active_num);
+			qDebug("reduce server %s active num=%d", server_addr.ToString(), iter->second.active_num);
 			if (iter->second.active_num==0)
 				iter->second.last_inactive_time = RakNet::GetTimeMS(); //record latest active time for CloseConnection
 		}
@@ -110,7 +110,7 @@ void ClientThread::run()
 
     RakNet::SocketDescriptor sd;
     sd.socketFamily = AF_INET;    
-    qInfo("ClientThread Start net");
+    qDebug("ClientThread Start net");
 
     rak_peer = RakNet::RakPeerInterface::GetInstance();
     rak_peer->Startup(15, &sd, 1);    
@@ -136,7 +136,7 @@ void ClientThread::run()
                 break;
 
             case ID_RESPONSE_OBJ_SEARCH:                
-                qInfo("Receive obj search response %d", packet->data[1]);
+                qDebug("Receive obj search response %d", packet->data[1]);
 				emit search_packet_arrive(QSharedPointer<RakNet::Packet>(packet, packet_del));
                 break;
 
@@ -159,7 +159,7 @@ void ClientThread::run()
 					//if inactive time exceed threshold, close it 
 					RakNet::AddressOrGUID server;
 					server.systemAddress = iter->first;
-					qInfo("close server %s connect", iter->first.ToString());
+					qDebug("close server %s connect", iter->first.ToString());
 					rak_peer->CloseConnection(server, true);
 					active_conect.erase(iter);
 					break;
@@ -171,7 +171,7 @@ void ClientThread::run()
 			for (iter = active_conect.begin(); iter != active_conect.end(); iter++) {
 				RakNet::AddressOrGUID server;
 				server.systemAddress = iter->first;
-				qInfo("close server %s connect", iter->first.ToString());
+				qDebug("close server %s connect", iter->first.ToString());
 				rak_peer->CloseConnection(server, true);
 			}
 			active_conect.clear();
